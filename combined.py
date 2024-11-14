@@ -149,57 +149,80 @@ def main(args):
     logger = logging.getLogger(__name__)
     logger.info("Project started")
 
-    # Data paths
-    labels_paths = [
-        'data/Gaussian_Cp_EGMS_L3_E27N51_100km_E_2018_2022_1.csv',
-        'data/Gaussian_Cp_EGMS_L3_E27N51_100km_U_2018_2022_1.csv',
-    ]
+    # Data paths for training
+    if args.train:
+        if not args.train_labels_paths or not args.train_features_paths:
+            logger.error("Training requires --train_labels_paths and --train_features_paths.")
+            return
 
-    features_paths = [
-        'data/time_series_EGMS_L3_E27N51_100km_E_2018_2022_1.csv',
-        'data/time_series_EGMS_L3_E27N51_100km_U_2018_2022_1.csv',
-    ]
+        labels_paths = [Path(path) for path in args.train_labels_paths]
+        features_paths = [Path(path) for path in args.train_features_paths]
+    else:
+        labels_paths = []
+        features_paths = []
 
+    # Data paths for prediction
+    if args.predict:
+        if not args.predict_labels_paths or not args.predict_features_paths:
+            logger.error("Prediction requires --predict_labels_paths and --predict_features_paths.")
+            return
+
+        predict_labels_paths = [Path(path) for path in args.predict_labels_paths]
+        predict_features_paths = [Path(path) for path in args.predict_features_paths]
+    else:
+        predict_labels_paths = []
+        predict_features_paths = []
+
+    # Common parameters
     max_len = 267  # Set to 267 to match the trained model
 
-    # Data Processing
-    mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
-    final_features = add_delta_t_features(mega_features)
-    sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=args.sample_size)
-
-    # Label Trimming
-    trimmed_labels = trim_labels(sampled_labels)
-
-    # Train-validation split
-    train_features, val_features, train_labels, val_labels = train_test_split(
-        sampled_features, trimmed_labels, test_size=0.2, random_state=42
-    )
-
-    # Create datasets based on model type
-    if args.model_type == 'lstm':
-        train_dataset = CustomDataset(train_features, train_labels)
-        val_dataset = CustomDataset(val_features, val_labels)
-    elif args.model_type == 'cnn':
-        train_dataset = CustomDatasetCNN(train_features, train_labels)
-        val_dataset = CustomDatasetCNN(val_features, val_labels)
-    else:
-        raise ValueError("Unsupported model type. Choose 'lstm' or 'cnn'.")
-
     if args.train:
-        # Training
-        trainer = train_model(
-            train_dataset,
-            val_dataset,
-            output_dir=args.output_dir,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            learning_rate=args.learning_rate,
-            model_type=args.model_type
+        # Data Processing for Training
+        mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
+        final_features = add_delta_t_features(mega_features)
+        sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=args.sample_size)
+
+        # Label Trimming
+        trimmed_labels = trim_labels(sampled_labels)
+
+        # Train-validation split
+        train_features, val_features, train_labels, val_labels = train_test_split(
+            sampled_features, trimmed_labels, test_size=0.2, random_state=42
         )
-        trainer.save_model(args.output_dir)
-        logger.info(f"Model saved to {args.output_dir}")
+
+        # Create datasets based on model type
+        if args.model_type == 'lstm':
+            train_dataset = CustomDataset(train_features, train_labels)
+            val_dataset = CustomDataset(val_features, val_labels)
+        elif args.model_type == 'cnn':
+            train_dataset = CustomDatasetCNN(train_features, train_labels)
+            val_dataset = CustomDatasetCNN(val_features, val_labels)
+        else:
+            raise ValueError("Unsupported model type. Choose 'lstm' or 'cnn'.")
+
+        if args.train:
+            # Training
+            trainer = train_model(
+                train_dataset,
+                val_dataset,
+                output_dir=args.output_dir,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                learning_rate=args.learning_rate,
+                model_type=args.model_type
+            )
+            trainer.save_model(args.output_dir)
+            logger.info(f"Model saved to {args.output_dir}")
 
     if args.predict:
+        # Data Processing for Prediction
+        mega_features, mega_labels = create_mega_df(predict_labels_paths, predict_features_paths, max_len)
+        final_features = add_delta_t_features(mega_features)
+        sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=args.sample_size)
+
+        # Label Trimming
+        trimmed_labels = trim_labels(sampled_labels)
+
         # Load configuration based on model type
         from src.model import LSTMConfig, CNNConfig
 
@@ -210,43 +233,46 @@ def main(args):
         else:
             raise ValueError("Unsupported model type. Choose 'lstm' or 'cnn'.")
 
-        # Prediction
+        # Load model
         model = load_model(args.model_path, config, model_type=args.model_type)
+
+        # Prediction
         predictions = make_predictions(model, sampled_features, batch_size=args.batch_size)
         save_predictions_to_csv(predictions, trimmed_labels, save_path=args.predictions_csv)
-        
-        # Batch Sample Prediction: Generate multiple plots
-        num_plot = args.num_plot_samples
-        total_samples = len(sampled_features)
-        
-        if num_plot > total_samples:
-            logger.warning(f"Requested number of plots ({num_plot}) exceeds the number of available samples ({total_samples}). Reducing to {total_samples}.")
-            num_plot = total_samples
-        
-        # Select unique random sample indices
-        sample_indices = random.sample(range(total_samples), k=num_plot)
-        
-        for idx, sample_idx in enumerate(sample_indices, start=1):
-            # Define a unique save path for each plot
-            base_save_path = Path(args.plot_save_path)
-            save_dir = base_save_path.parent
-            save_dir.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
-            
-            # Create a save path with sample index
-            save_path = save_dir / f"{base_save_path.stem}_sample_{sample_idx}{base_save_path.suffix}"
-            
-            # Generate plot for the sample
-            plot_model_output(
-                model=model,
-                features=sampled_features,
-                labels=trimmed_labels,
-                sample_index=sample_idx,
-                model_name=args.model_type.upper(),
-                save_path=str(save_path)
-            )
-            logger.info(f"Plot saved to {save_path}")
-        
-        logger.info("Prediction process completed.")
+
+        if args.save_plots:
+            # Batch Sample Prediction: Generate multiple plots
+            num_plot = args.num_plot_samples
+            total_samples = len(sampled_features)
+
+            if num_plot > total_samples:
+                logger.warning(f"Requested number of plots ({num_plot}) exceeds the number of available samples ({total_samples}). Reducing to {total_samples}.")
+                num_plot = total_samples
+
+            # Select unique random sample indices
+            sample_indices = random.sample(range(total_samples), k=num_plot)
+
+            for idx, sample_idx in enumerate(sample_indices, start=1):
+                # Define a unique save path for each plot
+                base_save_path = Path(args.plot_save_path)
+                save_dir = base_save_path.parent
+                save_dir.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
+
+                # Create a save path with sample index
+                save_path = save_dir / f"{base_save_path.stem}_sample_{sample_idx}{base_save_path.suffix}"
+
+                # Generate plot for the sample
+                plot_model_output(
+                    model=model,
+                    features=sampled_features,
+                    labels=trimmed_labels,
+                    sample_index=sample_idx,
+                    model_name=args.model_type.upper(),
+                    save_path=str(save_path)
+                )
+                logger.info(f"Plot saved to {save_path}")
+
+            logger.info("Prediction process completed.")
 
     logger.info("Project completed successfully")
 
@@ -255,6 +281,8 @@ if __name__ == "__main__":
 
     # Training arguments
     parser.add_argument('--train', action='store_true', help='Flag to trigger training')
+    parser.add_argument('--train_labels_paths', nargs='+', type=str, help='Paths to training labels CSV files')
+    parser.add_argument('--train_features_paths', nargs='+', type=str, help='Paths to training features CSV files')
     parser.add_argument('--epochs', type=int, default=100, help='Number of training epochs')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training and prediction')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for the optimizer')
@@ -262,11 +290,12 @@ if __name__ == "__main__":
 
     # Prediction arguments
     parser.add_argument('--predict', action='store_true', help='Flag to trigger prediction')
+    parser.add_argument('--predict_labels_paths', nargs='+', type=str, help='Paths to prediction labels CSV files')
+    parser.add_argument('--predict_features_paths', nargs='+', type=str, help='Paths to prediction features CSV files')
     parser.add_argument('--model_path', type=str, default='results/model', help='Path to the trained model')
     parser.add_argument('--predictions_csv', type=str, default='results/predictions.csv', help='Path to save the predictions CSV')
     parser.add_argument('--plot_save_path', type=str, default='results/model_output_sample.png', help='Base path to save the prediction plots')
-
-    # New argument for number of sample plots
+    parser.add_argument('--save_plots', action='store_true', help='Flag to enable plot creation during prediction')
     parser.add_argument('--num_plot_samples', type=int, default=1, help='Number of sample plots to generate during prediction')
 
     # General arguments
@@ -454,7 +483,7 @@ def trim_labels(labels):
     logger.debug("Trimming labels to a maximum of 1.0")
     return torch.clamp(labels, max=1.0)
 
-# LSTM Models
+# Existing LSTM Models
 class LSTMConfig(PretrainedConfig):
     model_type = "lstm"
 
@@ -499,7 +528,7 @@ class _LSTM(nn.Module):
         x = self.fc(x)
         return x
 
-# CNN Models
+# Existing CNN Models
 class CNNConfig(PretrainedConfig):
     model_type = "cnn"
 
@@ -547,10 +576,74 @@ class CNN1D(nn.Module):
         x = self.fc(x)
         return x
 
+# ----- New Attention LSTM Models -----
+class AttentionLSTMConfig(PretrainedConfig):
+    model_type = "attention_lstm"
+
+    def __init__(self, hidden_size=64, num_layers=1, max_len=276, dropout=0.1, **kwargs):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.max_len = max_len
+        self.dropout = dropout
+        logger.debug(f"AttentionLSTMConfig initialized with hidden_size={hidden_size}, num_layers={num_layers}, max_len={max_len}, dropout={dropout}")
+
+class Attention(nn.Module):
+    def __init__(self, hidden_size):
+        super(Attention, self).__init__()
+        self.attention = nn.Linear(hidden_size * 2, 1)  # *2 for bidirectional
+
+    def forward(self, lstm_output):
+        # lstm_output: [batch_size, seq_len, hidden_size*2]
+        scores = self.attention(lstm_output)  # [batch_size, seq_len, 1]
+        weights = torch.softmax(scores, dim=1)  # [batch_size, seq_len, 1]
+        context = torch.sum(lstm_output * weights, dim=1)  # [batch_size, hidden_size*2]
+        return context
+
+class AttentionLSTMModel(PreTrainedModel):
+    def __init__(self, config, verbose=False):
+        super().__init__(config)
+        self.model = _AttentionLSTM(input_size=2, hidden_size=config.hidden_size, num_layers=config.num_layers, max_len=config.max_len, dropout=config.dropout)
+        self.sigmoid = nn.Sigmoid()
+        if verbose:
+            logger.info("AttentionLSTMModel initialized")
+
+    def forward(self, input_ids, labels=None):
+        x = self.model(input_ids)
+        logits = self.sigmoid(x)
+        loss = None
+        if labels is not None:
+            loss_fct = nn.BCELoss()
+            loss = loss_fct(logits, labels)
+        return {'loss': loss, 'logits': logits}
+
+class _AttentionLSTM(nn.Module):
+    def __init__(self, input_size=2, hidden_size=64, num_layers=1, max_len=276, dropout=0.1):
+        super(_AttentionLSTM, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.max_len = max_len
+        self.lstm = nn.LSTM(input_size=input_size,
+                            hidden_size=hidden_size,
+                            num_layers=num_layers,
+                            batch_first=True,
+                            bidirectional=True,
+                            dropout=dropout if num_layers > 1 else 0)
+        self.attention = Attention(hidden_size)
+        self.fc = nn.Linear(hidden_size * 2, max_len)  # *2 for bidirectional
+        logger.debug(f"_AttentionLSTM initialized with hidden_size={hidden_size}, num_layers={num_layers}, max_len={max_len}, dropout={dropout}")
+
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)  # lstm_out: [batch_size, seq_len, hidden_size*2]
+        context = self.attention(lstm_out)  # context: [batch_size, hidden_size*2]
+        logits = self.fc(context)  # logits: [batch_size, max_len]
+        return logits
 
 # ----- End src/model.py -----
 
 # ----- Begin src/predict.py (Encoding: ascii) -----
+# src/predict.py
+
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
@@ -559,7 +652,7 @@ import pandas as pd
 import random
 from tqdm import tqdm
 import logging
-from .model import LSTMConfig, LSTMModel, CNNConfig, CNNModel
+from .model import LSTMConfig, LSTMModel, CNNConfig, CNNModel, AttentionLSTMConfig, AttentionLSTMModel
 from torch.utils.data import DataLoader
 import os
 import numpy as np
@@ -573,8 +666,10 @@ def load_model(model_path, config, model_type='lstm'):
         model = LSTMModel.from_pretrained(model_path, config=config)
     elif model_type == 'cnn':
         model = CNNModel.from_pretrained(model_path, config=config)
+    elif model_type == 'attention_lstm':
+        model = AttentionLSTMModel.from_pretrained(model_path, config=config)
     else:
-        raise ValueError("Unsupported model type. Choose 'lstm' or 'cnn'.")
+        raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention_lstm'.")
 
     model.eval()
     logger.info(f"{model_type.upper()} model loaded successfully")
@@ -678,10 +773,9 @@ def plot_model_output(model, features, labels, sample_index=None, model_name="Mo
     ax.tick_params(axis='y', labelcolor='r')
 
     ax2.plot(probabilities, color='b', label='Probabilities')
-    # ax2.plot(ground_truth, color='g', label='Ground Truth')
     for i,g in enumerate(ground_truth):
-        if g ==1:
-            ax2.vlines(i, 0, g, color='g')
+        if g == 1:
+            ax2.axvline(i, color='g', linestyle='--', alpha=0.5)
     ax2.set_ylabel('Probability / Ground Truth', color='b')
     ax2.tick_params(axis='y', labelcolor='b')
 
@@ -695,6 +789,7 @@ def plot_model_output(model, features, labels, sample_index=None, model_name="Mo
     logger.info(f"Plot saved to {save_path}")
     plt.close(fig)  # Close the figure to free memory
 
+
 # ----- End src/predict.py -----
 
 # ----- Begin src/train.py (Encoding: ascii) -----
@@ -703,7 +798,7 @@ def plot_model_output(model, features, labels, sample_index=None, model_name="Mo
 import logging
 from transformers import Trainer, TrainingArguments
 import torch
-from .model import LSTMConfig, LSTMModel, CNNConfig, CNNModel
+from .model import LSTMConfig, LSTMModel, CNNConfig, CNNModel, AttentionLSTMConfig, AttentionLSTMModel
 from .data_processing import CustomDataset, CustomDatasetCNN
 
 logger = logging.getLogger(__name__)
@@ -717,8 +812,11 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
     elif model_type == 'cnn':
         config = CNNConfig(seq_length=train_dataset.features.shape[1], num_features=train_dataset.features.shape[2])
         model = CNNModel(config=config, verbose=True)
+    elif model_type == 'attention_lstm':
+        config = AttentionLSTMConfig(hidden_size=64, num_layers=2, max_len=train_dataset.features.shape[1], dropout=0.3)
+        model = AttentionLSTMModel(config=config, verbose=True)
     else:
-        raise ValueError("Unsupported model type. Choose 'lstm' or 'cnn'.")
+        raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention_lstm'.")
 
     training_args = TrainingArguments(
         output_dir=output_dir,
@@ -745,7 +843,6 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
     logger.info("Training completed")
 
     return trainer
-
 
 # ----- End src/train.py -----
 

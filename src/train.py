@@ -47,4 +47,5 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
     trainer.train()
     logger.info("Training completed")
 
-    return trainer
+    # Return trainer and metrics
+    return trainer, trainer.state.log_history

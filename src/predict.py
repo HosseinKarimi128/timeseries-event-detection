@@ -95,6 +95,9 @@ def save_predictions_to_csv(predictions, labels, save_path='predictions.csv'):
     df.to_csv(save_path, index=False)
     logger.info(f"Predictions successfully saved to {save_path}")
 
+def convert_zeros_to_nans(tensor):
+    return tensor.masked_fill(tensor == 0, float('nan'))
+
 def plot_model_output(model, features, labels, sample_index=None, model_name="Model", save_path='model_output_sample.png'):
     """
     Plots the model output for a specific sample and saves it to a file.
@@ -121,7 +124,7 @@ def plot_model_output(model, features, labels, sample_index=None, model_name="Mo
     fig, ax = plt.subplots(figsize=(25, 5))
     ax2 = ax.twinx()
 
-    feature_plot = features[sample_index].cpu().numpy()
+    feature_plot = convert_zeros_to_nans(features[sample_index]).cpu().numpy()
     
     ax.scatter(range(len(feature_plot)), feature_plot[:, 0], color='r', alpha=0.5, label='Displacements')
     ax.set_xlabel('Time Steps')
