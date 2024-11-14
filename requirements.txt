@@ -1,0 +1,13 @@
+numpy
+pandas
+torch
+torchvision
+scikit-learn
+scipy
+matplotlib
+rich
+tqdm
+transformers
+torchinfo
+torchviz
+datasets

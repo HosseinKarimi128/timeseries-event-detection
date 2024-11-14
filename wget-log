@@ -1,0 +1,8 @@
+--2024-11-13 14:29:59--  https://files.pythonhosted.org/packages/37/59/44985a2bdc95c74e34fef3d10cb5d93ce13b0e2a7baefffe1b53853b502d/scikit_learn-1.5.2.tar.gz
+Resolving files.pythonhosted.org (files.pythonhosted.org)... 151.101.128.223, 151.101.64.223, 151.101.0.223, ...
+Connecting to files.pythonhosted.org (files.pythonhosted.org)|151.101.128.223|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 7001680 (6.7M) [application/octet-stream]
+Saving to: ‘scikit_learn-1.5.2.tar.gz’
+
+scikit_learn-1.5.2.tar.gz                          3%[==>                                                                                                     ] 207.39K  --.-KB/s    eta 6h 24m scikit_learn-1.5.2.tar.gz                         16%[================>                                                                                       ]   1.11M   473KB/s    eta 6h 24m scikit_learn-1.5.2.tar.gz                         16%[================>                                                                                       ]   1.11M   319KB/s    eta 60m 35sscikit_learn-1.5.2.tar.gz                         16%[================>                                                                                       ]   1.11M   240KB/s    eta 60m 35sscikit_learn-1.5.2.tar.gz                         16%[================>                                                                                       ]   1.11M   193KB/s    eta 60m 45sscikit_learn-1.5.2.tar.gz                         16%[================>                                                                                       ]   1.11M   161KB/s    eta 60m 45s
