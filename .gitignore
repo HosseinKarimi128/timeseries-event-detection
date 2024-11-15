@@ -164,5 +164,7 @@ cython_debug/
 results/
 logs/
 data/
+
+# Ignore specific Python files
 combined.py
 _integ.py

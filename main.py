@@ -5,6 +5,7 @@ from src.utils import setup_logging
 from src.data_processing import (
     create_mega_df,
     add_delta_t_features,
+    gap_removal,
     sample_and_scale,
     CustomDataset,
     CustomDatasetCNN
@@ -19,14 +20,14 @@ import torch
 import os
 
 def train_model_gradio(
-    labels_paths,
-    features_paths,
-    sample_size,
-    epochs,
-    batch_size,
-    learning_rate,
-    output_dir,
-    model_type
+    labels_paths=['data/Gaussian_Cp_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
+    features_paths=['data/time_series_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
+    sample_size=1000,
+    epochs=100,
+    batch_size=32,
+    learning_rate=0.001,
+    output_dir='results',
+    model_type='lstm'
 ):
     setup_logging()
     logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ def train_model_gradio(
     mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
     final_features = add_delta_t_features(mega_features)
     sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
-
+    sampled_features = gap_removal(sampled_features, max_len)
     # Label Trimming
     trimmed_labels = trim_labels(sampled_labels)
 
@@ -53,14 +54,14 @@ def train_model_gradio(
     )
 
     # Create datasets based on model type
-    if model_type == 'lstm' or model_type == 'attention_lstm':
+    if model_type == 'lstm' or model_type == 'attention':
         train_dataset = CustomDataset(train_features, train_labels)
         val_dataset = CustomDataset(val_features, val_labels)
     elif model_type == 'cnn':
         train_dataset = CustomDatasetCNN(train_features, train_labels)
         val_dataset = CustomDatasetCNN(val_features, val_labels)
     else:
-        raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention_lstm'.")
+        raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention'.")
 
     # Training
     trainer, metrics = train_model(
@@ -111,16 +112,16 @@ def predict_model_gradio(
     trimmed_labels = trim_labels(sampled_labels)
 
     # Load configuration based on model type
-    from src.model import LSTMConfig, CNNConfig, AttentionLSTMConfig
+    from src.model import LSTMConfig, CNNConfig, AttentionConfig
 
     if model_type == 'lstm':
         config = LSTMConfig.from_pretrained(model_path)
     elif model_type == 'cnn':
         config = CNNConfig.from_pretrained(model_path)
-    elif model_type == 'attention_lstm':
-        config = AttentionLSTMConfig.from_pretrained(model_path)
+    elif model_type == 'attention':
+        config = AttentionConfig.from_pretrained(model_path)
     else:
-        raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention_lstm'.")
+        raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention'.")
 
     # Load model
     model = load_model(model_path, config, model_type=model_type)

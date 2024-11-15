@@ -114,7 +114,7 @@ with gr.Blocks() as demo:
             epochs = gr.Number(value=100, label="Epochs")
             batch_size = gr.Number(value=32, label="Batch Size")
             learning_rate = gr.Number(value=0.001, label="Learning Rate")
-            model_type = gr.Radio(choices=['lstm', 'cnn', 'attention_lstm'], value='lstm', label="Model Type")
+            model_type = gr.Radio(choices=['lstm', 'cnn', 'attention'], value='lstm', label="Model Type")
 
             train_button = gr.Button("Start Training")
             train_output = gr.Image(label="Loss Over Epochs")
@@ -144,7 +144,7 @@ with gr.Blocks() as demo:
             batch_size = gr.Number(value=32, label="Batch Size")
             save_plots = gr.Checkbox(value=True, label="Save Plots")
             num_plot_samples = gr.Number(value=1, label="Number of Plot Samples")
-            model_type = gr.Radio(choices=['lstm', 'cnn', 'attention_lstm'], value='lstm', label="Model Type")
+            model_type = gr.Radio(choices=['lstm', 'cnn', 'attention'], value='lstm', label="Model Type")
 
             predict_button = gr.Button("Start Prediction")
             prediction_output = gr.Dataframe(label="Predictions")

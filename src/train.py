@@ -3,7 +3,7 @@
 import logging
 from transformers import Trainer, TrainingArguments
 import torch
-from .model import LSTMConfig, LSTMModel, CNNConfig, CNNModel, AttentionLSTMConfig, AttentionLSTMModel
+from .model import LSTMConfig, LSTMModel, CNNConfig, CNNModel, AttentionConfig, AttentionModel
 from .data_processing import CustomDataset, CustomDatasetCNN
 
 logger = logging.getLogger(__name__)
@@ -17,11 +17,11 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
     elif model_type == 'cnn':
         config = CNNConfig(seq_length=train_dataset.features.shape[1], num_features=train_dataset.features.shape[2])
         model = CNNModel(config=config, verbose=True)
-    elif model_type == 'attention_lstm':
-        config = AttentionLSTMConfig(hidden_size=64, num_layers=2, max_len=train_dataset.features.shape[1], dropout=0.3)
-        model = AttentionLSTMModel(config=config, verbose=True)
+    elif model_type == 'attention':
+        config = AttentionConfig(hidden_size=64, num_layers=2, max_len=train_dataset.features.shape[1], dropout=0.3)
+        model = AttentionModel(config=config, verbose=True)
     else:
-        raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention_lstm'.")
+        raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention'.")
 
     training_args = TrainingArguments(
         output_dir=output_dir,

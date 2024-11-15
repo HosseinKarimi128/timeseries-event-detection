@@ -56,7 +56,7 @@ def create_mega_df(labels, features, max_len):
 
 def create_delta_t_feature(sequence, max_len):
     sequence = np.nan_to_num(sequence)
-    is_zero_mask = sequence == 0
+    is_zero_mask = sequence != 0
     return count_ones_since_last_zero(is_zero_mask, max_len)
 
 def count_ones_since_last_zero(arr, max_len):
@@ -67,7 +67,7 @@ def count_ones_since_last_zero(arr, max_len):
             output.append(count)
             count = 1
         else:
-            output.append(0)
+            output.append(1)
             count += 1
     return np.array(output)
 
@@ -94,7 +94,6 @@ def sample_and_scale(final_features, mega_labels, sample_size=1000):
     scaler_delta_t = StandardScaler()
 
     features = scaler_features.fit_transform(features)
-    delta_t = scaler_delta_t.fit_transform(delta_t)
 
     # Combine scaled features
     scaled_features = np.stack((features, delta_t), axis=-1)
@@ -106,6 +105,25 @@ def sample_and_scale(final_features, mega_labels, sample_size=1000):
     logger.info(f"Sampled Labels shape: {sampled_labels.shape}")
 
     return sampled_features, sampled_labels
+
+def gap_removal(sampled_features, max_length=200):
+    logger.info("Removing gaps from features")
+    gap_mask = sampled_features[:, :, 0] != 0
+    output_features = []
+
+    for i in range(sampled_features.size(0)):
+        mask = gap_mask[i]
+        cleaned = sampled_features[i][mask]
+        if len(cleaned) > max_length:
+            cleaned = cleaned[:max_length]
+        else:
+            padding = torch.zeros(max_length - len(cleaned), sampled_features.size(2))
+            cleaned = torch.cat([cleaned, padding], dim=0)
+        output_features.append(cleaned)
+
+    output_features = torch.stack(output_features)
+    logger.info(f"Output Features shape after gap removal: {output_features.shape}")
+    return output_features
 
 
 def remove_nan_from_features(sampled_features, max_length=200):

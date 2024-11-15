@@ -8,7 +8,7 @@ import pandas as pd
 import random
 from tqdm import tqdm
 import logging
-from .model import LSTMConfig, LSTMModel, CNNConfig, CNNModel, AttentionLSTMConfig, AttentionLSTMModel
+from .model import LSTMConfig, LSTMModel, CNNConfig, CNNModel, AttentionConfig, AttentionModel
 from torch.utils.data import DataLoader
 import os
 import numpy as np
@@ -22,10 +22,10 @@ def load_model(model_path, config, model_type='lstm'):
         model = LSTMModel.from_pretrained(model_path, config=config)
     elif model_type == 'cnn':
         model = CNNModel.from_pretrained(model_path, config=config)
-    elif model_type == 'attention_lstm':
-        model = AttentionLSTMModel.from_pretrained(model_path, config=config)
+    elif model_type == 'attention':
+        model = AttentionModel.from_pretrained(model_path, config=config)
     else:
-        raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention_lstm'.")
+        raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention'.")
 
     model.eval()
     logger.info(f"{model_type.upper()} model loaded successfully")
