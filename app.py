@@ -14,8 +14,8 @@ def gradio_train_interface(
     model_type
 ):
     # The file paths are already provided when type='filepath'
-    train_labels_paths = train_labels_files
-    train_features_paths = train_features_files
+    train_labels_paths = [file.name for file in train_labels_files] if train_labels_files else []
+    train_features_paths = [file.name for file in train_features_files] if train_features_files else []
 
     # Determine output directory based on model type
     output_dir = f'results/{model_type}_model'
@@ -60,7 +60,7 @@ def gradio_train_interface(
 
 def gradio_predict_interface(
     model_path,
-    predict_labels_files,
+    predict_labels_files,  # Optional input
     predict_features_files,
     sample_size,
     batch_size,
@@ -68,27 +68,25 @@ def gradio_predict_interface(
     num_plot_samples,
     model_type
 ):
-    # The file paths are already provided when type='filepath'
-    predict_labels_paths = predict_labels_files
-    predict_features_paths = predict_features_files
+    import pandas as pd  # Ensure pandas is imported
+    from pathlib import Path
 
-    # Convert save_plots to boolean
-    save_plots = bool(save_plots)
+    # Convert Gradio File objects to paths
+    predict_features_paths = [file.name for file in predict_features_files] if predict_features_files else []
+    predict_labels_paths = [file.name for file in predict_labels_files] if predict_labels_files else []
 
-    # Determine output paths based on model type
+    # Determine output directory based on model type
     output_dir = f'results/{model_type}_model'
-    predictions_csv = f'{output_dir}/predictions.csv'
-    plot_save_path = f'{output_dir}/model_output_sample.png'
 
     # Call the prediction function
     predictions_csv_path, plots = predict_model_gradio(
         model_path=model_path,
-        labels_paths=predict_labels_paths,
+        labels_paths=predict_labels_paths,  # Pass actual paths or empty list
         features_paths=predict_features_paths,
         sample_size=int(sample_size),
         batch_size=int(batch_size),
-        predictions_csv=predictions_csv,
-        plot_save_path=plot_save_path,
+        predictions_csv=f'{output_dir}/predictions.csv',
+        plot_save_path=f'{output_dir}/model_output_sample.png',
         save_plots=save_plots,
         num_plot_samples=int(num_plot_samples),
         model_type=model_type
@@ -136,9 +134,17 @@ with gr.Blocks() as demo:
         with gr.TabItem("Predict"):
             gr.Markdown("## Prediction")
 
-            model_path = gr.Textbox(label="Model Path")
-            predict_labels_files = gr.File(label="Upload Prediction Labels CSV Files", file_count="multiple", type='filepath')
-            predict_features_files = gr.File(label="Upload Prediction Features CSV Files", file_count="multiple", type='filepath')
+            model_path = gr.Textbox(label="Model Path", placeholder="Path to the trained model")
+            predict_labels_files = gr.File(
+                label="Upload Prediction Labels CSV Files (Optional)", 
+                file_count="multiple", 
+                type='filepath'
+            )
+            predict_features_files = gr.File(
+                label="Upload Prediction Features CSV Files", 
+                file_count="multiple", 
+                type='filepath'
+            )
 
             sample_size = gr.Number(value=1000, label="Sample Size")
             batch_size = gr.Number(value=32, label="Batch Size")
@@ -154,7 +160,7 @@ with gr.Blocks() as demo:
                 gradio_predict_interface,
                 inputs=[
                     model_path,
-                    predict_labels_files,
+                    predict_labels_files,    # Optional labels
                     predict_features_files,
                     sample_size,
                     batch_size,
@@ -164,6 +170,5 @@ with gr.Blocks() as demo:
                 ],
                 outputs=[prediction_output, plot_output]
             )
-
 
 demo.launch()

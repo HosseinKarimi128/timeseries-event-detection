@@ -21,36 +21,70 @@ def truncate_data_frame(df, max_len):
     return df.iloc[:, :max_len]
 
 def create_mega_df(labels, features, max_len):
+    """
+    Creates combined DataFrames for features and labels.
+    If labels are not provided, labels DataFrame will be filled with zeros or set to None.
+
+    Args:
+        labels (list of Path): List of label file paths. Can be empty.
+        features (list of Path): List of feature file paths.
+        max_len (int): Maximum sequence length.
+
+    Returns:
+        tuple: (mega_features, mega_labels)
+            mega_features (pd.DataFrame): Combined features.
+            mega_labels (pd.DataFrame or None): Combined labels or None if not provided.
+    """
     logger.info("Creating mega DataFrame from labels and features")
     all_features = []
     all_labels = []
 
-    for i in range(len(labels)):
+    for i in range(len(features)):
         features_path = features[i]
-        labels_path = labels[i]
-
         features_df = pd.read_csv(features_path, header=None)
-        labels_df = pd.read_csv(labels_path, header=None)
 
         if len(features_df) < max_len:
             features_df = pad_data_frame(features_df, max_len)
         else:
             features_df = truncate_data_frame(features_df, max_len)
 
-        if len(labels_df) < max_len:
-            labels_df = pad_data_frame(labels_df, max_len)
-        else:
-            labels_df = truncate_data_frame(labels_df, max_len)
-
         all_features.append(features_df)
-        all_labels.append(labels_df)
-        logger.debug(f"Processed file {i+1}/{len(labels)}: Features shape {features_df.shape}")
+        logger.debug(f"Processed features file {i+1}/{len(features)}: Features shape {features_df.shape}")
 
-    mega_features = pd.concat(all_features, axis=0).reset_index(drop=True)
-    mega_labels = pd.concat(all_labels, axis=0).reset_index(drop=True)
+        if labels:
+            if i < len(labels):
+                labels_path = labels[i]
+                labels_df = pd.read_csv(labels_path, header=None)
 
-    logger.info(f"Mega Features shape: {mega_features.shape}")
-    logger.info(f"Mega Labels shape: {mega_labels.shape}")
+                if len(labels_df) < max_len:
+                    labels_df = pad_data_frame(labels_df, max_len)
+                else:
+                    labels_df = truncate_data_frame(labels_df, max_len)
+
+                all_labels.append(labels_df)
+                logger.debug(f"Processed labels file {i+1}/{len(labels)}: Labels shape {labels_df.shape}")
+            else:
+                logger.warning(f"No corresponding label file for features file {i+1}. Filling with zeros.")
+                dummy_labels = pd.DataFrame(0, index=range(max_len), columns=[0])
+                all_labels.append(dummy_labels)
+        else:
+            logger.debug(f"No labels provided for features file {i+1}. Filling labels with zeros.")
+            dummy_labels = pd.DataFrame(0, index=range(max_len), columns=[0])
+            all_labels.append(dummy_labels)
+
+    if all_features:
+        mega_features = pd.concat(all_features, axis=0).reset_index(drop=True)
+        logger.info(f"Mega Features shape: {mega_features.shape}")
+    else:
+        mega_features = pd.DataFrame()
+        logger.warning("No features provided. Mega Features is empty.")
+
+    if labels:
+        mega_labels = pd.concat(all_labels, axis=0).reset_index(drop=True)
+        logger.info(f"Mega Labels shape: {mega_labels.shape}")
+    else:
+        mega_labels = None
+        logger.info("No labels provided. Mega Labels is set to None.")
 
     return mega_features, mega_labels
 
@@ -80,29 +114,51 @@ def add_delta_t_features(mega_features):
     return final_features
 
 def sample_and_scale(final_features, mega_labels, sample_size=1000):
+    """
+    Samples and scales the features and labels.
+
+    Args:
+        final_features (np.ndarray): Final features array with shape (num_samples, seq_len, num_features).
+        mega_labels (pd.DataFrame or None): Mega labels DataFrame or None if labels are not provided.
+        sample_size (int): Number of samples to select.
+
+    Returns:
+        tuple: (sampled_features, sampled_labels)
+            sampled_features (torch.Tensor): Sampled and scaled features.
+            sampled_labels (torch.Tensor or None): Sampled and scaled labels or None if labels are not provided.
+    """
     logger.info("Sampling and scaling features and labels")
-    indices = np.random.choice(len(final_features), size=sample_size, replace=False)
+    num_available = len(final_features)
+    actual_sample_size = min(sample_size, num_available)
+    indices = np.random.choice(num_available, size=actual_sample_size, replace=False)
     sampled_features = final_features[indices]
-    sampled_labels = mega_labels.values[indices]
+
+    # Initialize sampled_labels as None
+    sampled_labels = None
+
+    if mega_labels is not None:
+        sampled_labels = mega_labels.values[indices]
 
     # Separate features and delta_t features
     features = sampled_features[:, :, 0]
     delta_t = sampled_features[:, :, 1]
 
-    # Scale features and delta_t separately
+    # Scale features
     scaler_features = StandardScaler()
-    scaler_delta_t = StandardScaler()
-
     features = scaler_features.fit_transform(features)
 
-    # Combine scaled features
+    # Combine scaled features with delta_t (assuming delta_t doesn't need scaling)
     scaled_features = np.stack((features, delta_t), axis=-1)
 
     sampled_features = torch.from_numpy(scaled_features).float()
-    sampled_labels = torch.from_numpy(sampled_labels).float()
 
-    logger.info(f"Sampled Features shape: {sampled_features.shape}")
-    logger.info(f"Sampled Labels shape: {sampled_labels.shape}")
+    if sampled_labels is not None:
+        sampled_labels = torch.from_numpy(sampled_labels).float()
+        logger.info(f"Sampled Features shape: {sampled_features.shape}")
+        logger.info(f"Sampled Labels shape: {sampled_labels.shape}")
+    else:
+        logger.info(f"Sampled Features shape: {sampled_features.shape}")
+        logger.info("Sampled Labels: None")
 
     return sampled_features, sampled_labels
 
@@ -124,7 +180,6 @@ def gap_removal(sampled_features, max_length=200):
     output_features = torch.stack(output_features)
     logger.info(f"Output Features shape after gap removal: {output_features.shape}")
     return output_features
-
 
 def remove_nan_from_features(sampled_features, max_length=200):
     logger.info("Removing NaNs from features")

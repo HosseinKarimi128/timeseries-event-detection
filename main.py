@@ -6,6 +6,7 @@ from src.data_processing import (
     create_mega_df,
     add_delta_t_features,
     gap_removal,
+    remove_nan_from_features,
     sample_and_scale,
     CustomDataset,
     CustomDatasetCNN
@@ -18,6 +19,7 @@ import random
 from pathlib import Path
 import torch
 import os
+from matplotlib import pyplot as plt
 
 def train_model_gradio(
     labels_paths=['data/Gaussian_Cp_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
@@ -44,7 +46,8 @@ def train_model_gradio(
     mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
     final_features = add_delta_t_features(mega_features)
     sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
-    sampled_features = gap_removal(sampled_features, max_len)
+    sampled_features = remove_nan_from_features(sampled_features, max_len)
+
     # Label Trimming
     trimmed_labels = trim_labels(sampled_labels)
 
@@ -81,7 +84,7 @@ def train_model_gradio(
 
 def predict_model_gradio(
     model_path,
-    labels_paths,
+    labels_paths,  # Can be an empty list if labels are not uploaded
     features_paths,
     sample_size,
     batch_size,
@@ -95,7 +98,7 @@ def predict_model_gradio(
     logger = logging.getLogger(__name__)
     logger.info("Starting prediction via Gradio interface")
 
-    labels_paths = [Path(path) for path in labels_paths]
+    labels_paths = [Path(path) for path in labels_paths] if labels_paths else []
     features_paths = [Path(path) for path in features_paths]
     max_len = 267  # Adjust based on your data
 
@@ -106,10 +109,14 @@ def predict_model_gradio(
     # Data Processing for Prediction
     mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
     final_features = add_delta_t_features(mega_features)
-    sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
+    sampled_original_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
+    sampled_features = remove_nan_from_features(sampled_original_features, max_len)
 
-    # Label Trimming
-    trimmed_labels = trim_labels(sampled_labels)
+    # Label Trimming (only if labels are available)
+    if sampled_labels is not None and len(sampled_labels) > 0:
+        trimmed_labels = trim_labels(sampled_labels)
+    else:
+        trimmed_labels = None
 
     # Load configuration based on model type
     from src.model import LSTMConfig, CNNConfig, AttentionConfig
@@ -128,7 +135,7 @@ def predict_model_gradio(
 
     # Prediction
     predictions = make_predictions(model, sampled_features, batch_size=batch_size)
-    save_predictions_to_csv(predictions, trimmed_labels, save_path=predictions_csv)
+    save_predictions_to_csv(sampled_original_features, predictions, trimmed_labels, save_path=predictions_csv)
 
     plots = []
     if save_plots:
@@ -155,8 +162,9 @@ def predict_model_gradio(
             # Generate plot for the sample
             plot_model_output(
                 model=model,
+                original_features=sampled_original_features,
                 features=sampled_features,
-                labels=trimmed_labels,
+                labels=trimmed_labels,  # Can be None
                 sample_index=sample_idx,
                 model_name=model_type.upper(),
                 save_path=str(save_path)

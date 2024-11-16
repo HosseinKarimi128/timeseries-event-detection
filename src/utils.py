@@ -10,7 +10,7 @@ def setup_logging(log_file='logs/project.log'):
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,  # Set to DEBUG to capture detailed logs
         format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
         handlers=[
             logging.FileHandler(log_file),
