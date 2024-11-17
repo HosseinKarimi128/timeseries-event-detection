@@ -1,5 +1,3 @@
-# app.py
-
 import gradio as gr
 from main import train_model_gradio, predict_model_gradio
 import pandas as pd
@@ -59,7 +57,6 @@ def gradio_train_interface(
         return "No loss data available."
 
 def gradio_predict_interface(
-    model_path,
     predict_labels_files,  # Optional input
     predict_features_files,
     sample_size,
@@ -70,6 +67,9 @@ def gradio_predict_interface(
 ):
     import pandas as pd  # Ensure pandas is imported
     from pathlib import Path
+
+    # Determine model path based on model_type
+    model_path = f'results/{model_type}_model'
 
     # Convert Gradio File objects to paths
     predict_features_paths = [file.name for file in predict_features_files] if predict_features_files else []
@@ -112,7 +112,7 @@ with gr.Blocks() as demo:
             epochs = gr.Number(value=100, label="Epochs")
             batch_size = gr.Number(value=32, label="Batch Size")
             learning_rate = gr.Number(value=0.001, label="Learning Rate")
-            model_type = gr.Radio(choices=['lstm', 'cnn', 'attention'], value='lstm', label="Model Type")
+            model_type_train = gr.Radio(choices=['lstm', 'cnn', 'attention'], value='lstm', label="Model Type")
 
             train_button = gr.Button("Start Training")
             train_output = gr.Image(label="Loss Over Epochs")
@@ -126,7 +126,7 @@ with gr.Blocks() as demo:
                     epochs,
                     batch_size,
                     learning_rate,
-                    model_type
+                    model_type_train
                 ],
                 outputs=train_output
             )
@@ -134,7 +134,7 @@ with gr.Blocks() as demo:
         with gr.TabItem("Predict"):
             gr.Markdown("## Prediction")
 
-            model_path = gr.Textbox(label="Model Path", placeholder="Path to the trained model")
+            # Removed model_path textbox
             predict_labels_files = gr.File(
                 label="Upload Prediction Labels CSV Files (Optional)", 
                 file_count="multiple", 
@@ -146,11 +146,11 @@ with gr.Blocks() as demo:
                 type='filepath'
             )
 
-            sample_size = gr.Number(value=1000, label="Sample Size")
-            batch_size = gr.Number(value=32, label="Batch Size")
+            sample_size_predict = gr.Number(value=1000, label="Sample Size")
+            batch_size_predict = gr.Number(value=32, label="Batch Size")
             save_plots = gr.Checkbox(value=True, label="Save Plots")
             num_plot_samples = gr.Number(value=1, label="Number of Plot Samples")
-            model_type = gr.Radio(choices=['lstm', 'cnn', 'attention'], value='lstm', label="Model Type")
+            model_type_predict = gr.Radio(choices=['lstm', 'cnn', 'attention'], value='lstm', label="Model Type")
 
             predict_button = gr.Button("Start Prediction")
             prediction_output = gr.Dataframe(label="Predictions")
@@ -159,14 +159,13 @@ with gr.Blocks() as demo:
             predict_button.click(
                 gradio_predict_interface,
                 inputs=[
-                    model_path,
                     predict_labels_files,    # Optional labels
                     predict_features_files,
-                    sample_size,
-                    batch_size,
+                    sample_size_predict,
+                    batch_size_predict,
                     save_plots,
                     num_plot_samples,
-                    model_type
+                    model_type_predict
                 ],
                 outputs=[prediction_output, plot_output]
             )
