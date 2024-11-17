@@ -28,6 +28,7 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
         raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention'.")
     sample_input = train_dataset[0:32]['input_ids']
     print(summary(model, input_data = (sample_input)))
+    breakpoint()
     training_args = TrainingArguments(
         output_dir=output_dir,
         evaluation_strategy="epoch",

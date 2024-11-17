@@ -244,26 +244,132 @@ class Attention(nn.Module):
         context = torch.sum(inputs * weights, dim=1)  # [batch_size, input_size]
         return context
 
+class AttentionConfig(PretrainedConfig):
+    model_type = "attention_with_bilstm"
+    
+    def __init__(
+        self, 
+        input_size=2, 
+        lstm_hidden_size=128, 
+        lstm_num_layers=1, 
+        lstm_dropout=0.1, 
+        attention_dim=2048, 
+        max_len=276, 
+        dropout=0.1, 
+        **kwargs
+    ):
+        """
+        Configuration for the Attention model with a bidirectional LSTM.
+        
+        Args:
+            input_size (int): Number of input features per time step.
+            lstm_hidden_size (int): Hidden size of the LSTM.
+            lstm_num_layers (int): Number of LSTM layers.
+            lstm_dropout (float): Dropout rate between LSTM layers.
+            attention_dim (int): Dimension of the attention layer.
+            max_len (int): Maximum sequence length.
+            dropout (float): Dropout rate after attention.
+            **kwargs: Additional configuration parameters.
+        """
+        super().__init__(**kwargs)
+        self.input_size = input_size
+        self.lstm_hidden_size = lstm_hidden_size
+        self.lstm_num_layers = lstm_num_layers
+        self.lstm_dropout = lstm_dropout
+        self.attention_dim = attention_dim
+        self.max_len = max_len
+        self.dropout = dropout
+        logger.debug(
+            f"AttentionConfig initialized with input_size={input_size}, "
+            f"lstm_hidden_size={lstm_hidden_size}, lstm_num_layers={lstm_num_layers}, "
+            f"lstm_dropout={lstm_dropout}, attention_dim={attention_dim}, "
+            f"max_len={max_len}, dropout={dropout}"
+        )
+
+class Attention(nn.Module):
+    def __init__(self, input_size, attention_dim):
+        """
+        Attention mechanism that computes attention weights and context vector.
+        
+        Args:
+            input_size (int): Number of input features per time step (from LSTM).
+            attention_dim (int): Dimension of the attention layer.
+        """
+        super(Attention, self).__init__()
+        self.attention = nn.Sequential(
+            nn.Linear(input_size, attention_dim),
+            nn.Tanh(),
+            nn.Linear(attention_dim, 1)
+        )
+    
+    def forward(self, inputs, mask=None):
+        """
+        Forward pass for the attention mechanism.
+        
+        Args:
+            inputs (Tensor): Input tensor of shape [batch_size, seq_len, input_size]
+            mask (Tensor, optional): Mask tensor of shape [batch_size, seq_len]
+        
+        Returns:
+            context (Tensor): Context vector of shape [batch_size, input_size]
+        """
+        # Compute attention scores
+        scores = self.attention(inputs).squeeze(-1)  # [batch_size, seq_len]
+        
+        if mask is not None:
+            # Apply a large negative value to padded positions
+            scores = scores.masked_fill(~mask, float('-inf'))
+        
+        # Compute attention weights
+        weights = torch.softmax(scores, dim=1)  # [batch_size, seq_len]
+        weights = weights.unsqueeze(-1)  # [batch_size, seq_len, 1]
+        
+        # Compute the weighted sum of inputs
+        context = torch.sum(inputs * weights, dim=1)  # [batch_size, input_size]
+        return context
+
 class AttentionModel(PreTrainedModel):
     config_class = AttentionConfig
 
     def __init__(self, config, verbose=False):
         """
-        Attention-only model without LSTM.
+        Attention model with a bidirectional LSTM before the attention mechanism.
         
         Args:
             config (AttentionConfig): Configuration object.
             verbose (bool): If True, logs additional information.
         """
         super().__init__(config)
-        self.attention = Attention(input_size=config.input_size, attention_dim=config.attention_dim)
+        # Initialize the bidirectional LSTM
+        self.lstm = nn.LSTM(
+            input_size=config.input_size,
+            hidden_size=config.lstm_hidden_size,
+            num_layers=config.lstm_num_layers,
+            dropout=config.lstm_dropout if config.lstm_num_layers > 1 else 0.0,
+            bidirectional=True,
+            batch_first=True
+        )
+        logger.debug(
+            f"LSTM initialized with hidden_size={config.lstm_hidden_size}, "
+            f"num_layers={config.lstm_num_layers}, dropout={config.lstm_dropout}, "
+            f"bidirectional=True"
+        )
+        
+        # Update the input size for attention based on bidirectional LSTM
+        attention_input_size = config.lstm_hidden_size * 2  # because bidirectional
+        self.attention = Attention(input_size=attention_input_size, attention_dim=config.attention_dim)
+        logger.debug(
+            f"Attention layer initialized with input_size={attention_input_size}, "
+            f"attention_dim={config.attention_dim}"
+        )
+        
         self.dropout = nn.Dropout(config.dropout)
-        self.fc = nn.Linear(config.input_size, config.max_len)
+        self.fc = nn.Linear(attention_input_size, config.max_len)
         self.sigmoid = nn.Sigmoid()
         
         if verbose:
-            logger.info("AttentionModel initialized without LSTM")
-    
+            logger.info("AttentionModel initialized with bidirectional LSTM")
+
     def _generate_attention_mask(self, input_ids, padding_value=0):
         """
         Generates an attention mask for the input tensor.
@@ -275,7 +381,7 @@ class AttentionModel(PreTrainedModel):
         Returns:
             Tensor: Attention mask of shape [batch_size, seq_len]
         """
-        # Create mask where positions are 1 if not all features are equal to padding_value
+        # Create mask where positions are True if not all features are equal to padding_value
         mask = (input_ids.abs().sum(dim=-1) != padding_value).to(torch.bool)  # [batch_size, seq_len]
         return mask
 
@@ -295,9 +401,20 @@ class AttentionModel(PreTrainedModel):
         if torch.isnan(attention_mask).any():
             logger.warning("Attention mask contains NaN values.")
 
+        # Pass inputs through the bidirectional LSTM
+        lstm_output, _ = self.lstm(input_ids)  # lstm_output: [batch_size, seq_len, hidden_size * 2]
+        if torch.isnan(lstm_output).any():
+            logger.warning("LSTM output contains NaN values.")
+
         # Compute context vector using attention mechanism
-        context = self.attention(input_ids, mask=attention_mask)  # [batch_size, input_size]
+        context = self.attention(lstm_output, mask=attention_mask)  # [batch_size, hidden_size * 2]
+        if torch.isnan(context).any():
+            logger.warning("Context vector contains NaN values.")
+
+        # Apply dropout
         dropped = self.dropout(context)
+        
+        # Compute logits
         logits = self.fc(dropped)  # [batch_size, max_len]
         logits = self.sigmoid(logits)  # [batch_size, max_len]
         
