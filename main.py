@@ -6,6 +6,7 @@ from src.data_processing import (
     create_mega_df,
     add_delta_t_features,
     gap_removal,
+    just_scale,
     remove_nan_from_features,
     sample_and_scale,
     CustomDataset,
@@ -92,7 +93,8 @@ def predict_model_gradio(
     plot_save_path,
     save_plots,
     num_plot_samples,
-    model_type
+    model_type,
+    input_indices=None,
 ):
     setup_logging()
     logger = logging.getLogger(__name__)
@@ -109,7 +111,26 @@ def predict_model_gradio(
     # Data Processing for Prediction
     mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
     final_features = add_delta_t_features(mega_features)
+    # if input_indices is not None:
+    #     if (input_indices[1] - input_indices[0]) > 2:
+    #         sampled_original_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
+    #     else:
+    #         final_features = final_features[input_indices[0]:input_indices[1]]
+    #         mega_labels = mega_labels[input_indices[0]:input_indices[1]]
+    #         sampled_original_features, sampled_labels = just_scale(final_features, mega_labels)
+    # else:
+    #     if sample_size > 2:
+        #     sampled_original_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
+        # else:
+        #     i = random.randint(0, len(final_features) - 2)
+        #     final_features = final_features[i:i+sample_size]
+        #     mega_labels = mega_labels[i:i+sample_size]
+        #     sampled_original_features, sampled_labels = just_scale(final_features, mega_labels)
+    if input_indices is not None:
+        final_features = final_features[input_indices[0]:input_indices[1]]
+        mega_labels = mega_labels[input_indices[0]:input_indices[1]]
     sampled_original_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
+
     sampled_features = remove_nan_from_features(sampled_original_features, max_len)
 
     # Label Trimming (only if labels are available)
@@ -147,7 +168,10 @@ def predict_model_gradio(
             logger.warning(f"Requested number of plots ({num_plot}) exceeds the number of available samples ({total_samples}). Reducing to {total_samples}.")
             num_plot = total_samples
 
-        # Select unique random sample indices
+        # if input_indices is not None:
+        #     sample_indices = list(range(input_indices[0], input_indices[1]))
+        # else:
+            # Select unique random sample indices
         sample_indices = random.sample(range(total_samples), k=num_plot)
 
         for sample_idx in sample_indices:

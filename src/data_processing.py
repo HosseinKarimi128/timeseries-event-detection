@@ -139,21 +139,44 @@ def sample_and_scale(final_features, mega_labels, sample_size=1000):
     if mega_labels is not None:
         sampled_labels = mega_labels.values[indices]
 
-    # Separate features and delta_t features
-    features = sampled_features[:, :, 0]
-    delta_t = sampled_features[:, :, 1]
+    # # Separate features and delta_t features
+    # features = sampled_features[:, :, 0]
+    # delta_t = sampled_features[:, :, 1]
 
-    # Scale features
-    scaler_features = StandardScaler()
-    features = scaler_features.fit_transform(features)
+    # # Scale features
+    # scaler_features = StandardScaler()
+    # features = scaler_features.fit_transform(features)
 
-    # Combine scaled features with delta_t (assuming delta_t doesn't need scaling)
-    scaled_features = np.stack((features, delta_t), axis=-1)
+    # # Combine scaled features with delta_t (assuming delta_t doesn't need scaling)
+    # scaled_features = np.stack((features, delta_t), axis=-1)
 
-    sampled_features = torch.from_numpy(scaled_features).float()
+    sampled_features = torch.from_numpy(sampled_features).float()
 
     if sampled_labels is not None:
         sampled_labels = torch.from_numpy(sampled_labels).float()
+        logger.info(f"Sampled Features shape: {sampled_features.shape}")
+        logger.info(f"Sampled Labels shape: {sampled_labels.shape}")
+    else:
+        logger.info(f"Sampled Features shape: {sampled_features.shape}")
+        logger.info("Sampled Labels: None")
+
+    return sampled_features, sampled_labels
+
+def just_scale(final_features, mega_labels):
+    logger.info("Scaling features and labels")
+    features = final_features[:, :, 0]
+    delta_t = final_features[:, :, 1]
+    not_nan_features = features[~np.isnan(features)]
+    mean = np.mean(not_nan_features)
+    std = np.std(not_nan_features)
+    scaled_features = (features - mean) / (std)
+    # Combine scaled features with delta_t (assuming delta_t doesn't need scaling)
+    scaled_features = np.stack((scaled_features, delta_t), axis=-1)
+
+    sampled_features = torch.from_numpy(scaled_features).float()
+
+    if mega_labels is not None:
+        sampled_labels = torch.from_numpy(mega_labels.values).float()
         logger.info(f"Sampled Features shape: {sampled_features.shape}")
         logger.info(f"Sampled Labels shape: {sampled_labels.shape}")
     else:

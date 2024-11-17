@@ -63,10 +63,10 @@ def gradio_predict_interface(
     batch_size,
     save_plots,
     num_plot_samples,
-    model_type
+    model_type,
+    start_index=None,
+    end_index=None
 ):
-    import pandas as pd  # Ensure pandas is imported
-    from pathlib import Path
 
     # Determine model path based on model_type
     model_path = f'results/{model_type}_model'
@@ -78,6 +78,10 @@ def gradio_predict_interface(
     # Determine output directory based on model type
     output_dir = f'results/{model_type}_model'
 
+    if start_index is not None and end_index is not None:
+        sample_indices = (start_index, end_index)
+    else:
+        sample_indices = None
     # Call the prediction function
     predictions_csv_path, plots = predict_model_gradio(
         model_path=model_path,
@@ -89,7 +93,8 @@ def gradio_predict_interface(
         plot_save_path=f'{output_dir}/model_output_sample.png',
         save_plots=save_plots,
         num_plot_samples=int(num_plot_samples),
-        model_type=model_type
+        model_type=model_type,
+        input_indices = sample_indices
     )
 
     # Read predictions CSV to display
@@ -105,9 +110,9 @@ with gr.Blocks() as demo:
         with gr.TabItem("Train"):
             gr.Markdown("## Training")
 
-            train_labels_files = gr.File(label="Upload Training Labels CSV Files", file_count="multiple", type='filepath')
             train_features_files = gr.File(label="Upload Training Features CSV Files", file_count="multiple", type='filepath')
-
+            train_labels_files = gr.File(label="Upload Training Labels CSV Files", file_count="multiple", type='filepath')
+        
             sample_size = gr.Number(value=1000, label="Sample Size")
             epochs = gr.Number(value=100, label="Epochs")
             batch_size = gr.Number(value=32, label="Batch Size")
@@ -134,18 +139,20 @@ with gr.Blocks() as demo:
         with gr.TabItem("Predict"):
             gr.Markdown("## Prediction")
 
+            predict_features_files = gr.File(
+                label="Upload Prediction Features CSV Files", 
+                file_count="multiple", 
+                type='filepath'
+            )
             # Removed model_path textbox
             predict_labels_files = gr.File(
                 label="Upload Prediction Labels CSV Files (Optional)", 
                 file_count="multiple", 
                 type='filepath'
             )
-            predict_features_files = gr.File(
-                label="Upload Prediction Features CSV Files", 
-                file_count="multiple", 
-                type='filepath'
-            )
 
+            start_index = gr.Number(value=None, label="Start Index")
+            end_index = gr.Number(value=None, label="End Index")
             sample_size_predict = gr.Number(value=1000, label="Sample Size")
             batch_size_predict = gr.Number(value=32, label="Batch Size")
             save_plots = gr.Checkbox(value=True, label="Save Plots")
@@ -165,7 +172,9 @@ with gr.Blocks() as demo:
                     batch_size_predict,
                     save_plots,
                     num_plot_samples,
-                    model_type_predict
+                    model_type_predict,
+                    start_index, 
+                    end_index
                 ],
                 outputs=[prediction_output, plot_output]
             )
