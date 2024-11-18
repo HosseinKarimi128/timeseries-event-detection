@@ -164,5 +164,3 @@ If you'd like to contribute to this project, feel free to submit issues or pull 
 This project is not publicly available yet and is under private development for a specific paper. For usage rights, please contact the repository owner.
 
 --- 
-
-Enjoy using the tool for your time series event detection tasks!
