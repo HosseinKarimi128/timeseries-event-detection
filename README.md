@@ -1,7 +1,7 @@
 # Time Series Event Detection Models
 
 
-![Time Series Event Detection](banner.webp)
+![Time Series Event Detection](banner.jpg)
 
 This project provides a solution for detecting events in time series data using state-of-the-art models. It is designed to support applications such as change point detection in InSAR data, but it can be used for any event detection task by training models on the relevant dataset. The system includes a user-friendly interface, making it accessible to both technical and non-technical users.
 
