@@ -1,6 +1,7 @@
 import gradio as gr
 from main import train_model_gradio, predict_model_gradio
 import pandas as pd
+import json  # Import json for formatting
 
 def gradio_train_interface(
     train_labels_files,
@@ -19,7 +20,7 @@ def gradio_train_interface(
     output_dir = f'results/{model_type}_model'
 
     # Call the training function
-    metrics = train_model_gradio(
+    metrics, evaluation_results = train_model_gradio(
         labels_paths=train_labels_paths,
         features_paths=train_features_paths,
         sample_size=int(sample_size),
@@ -34,6 +35,18 @@ def gradio_train_interface(
     # Extract training loss and epoch numbers
     training_logs = [(log['epoch'], log['loss']) for log in metrics if 'loss' in log and 'epoch' in log and 'eval_loss' not in log]
     eval_logs = [(log['epoch'], log['eval_loss']) for log in metrics if 'eval_loss' in log and 'epoch' in log]
+    training_train_samples_per_second = [log['train_samples_per_second'] for log in metrics if 'train_samples_per_second' in log]
+    evaluation_eval_samples_per_second = [log['eval_samples_per_second'] for log in metrics if 'eval_samples_per_second' in log]
+    training_eval_runtime = [log['train_runtime'] for log in metrics if 'train_runtime' in log]
+    evaluation_train_runtime = [log['eval_runtime'] for log in metrics if 'eval_runtime' in log]
+
+    evaluation_results['# of epochs'] = len(training_logs)
+    evaluation_results['final evaluation loss'] = eval_logs[-1][1] if eval_logs else None
+    evaluation_results['final training loss'] = training_logs[-1][1] if training_logs else None
+    evaluation_results['eval_samples_per_second'] = evaluation_eval_samples_per_second[-1] if evaluation_eval_samples_per_second else None
+    evaluation_results['train_samples_per_second'] = training_train_samples_per_second[-1] if training_train_samples_per_second else None
+    evaluation_results['eval_runtime'] = evaluation_train_runtime[-1] if evaluation_train_runtime else None
+    evaluation_results['train_runtime'] = training_eval_runtime[-1] if training_eval_runtime else None
 
     if training_logs and eval_logs:
         # Separate epochs and losses
@@ -52,9 +65,15 @@ def gradio_train_interface(
         plot_path = f'results/{model_type}_model/loss_over_epochs.png'
         plt.savefig(plot_path)
         plt.close()
-        return plot_path
+
+        # Convert evaluation_results to a DataFrame
+        evaluation_df = pd.DataFrame(list(evaluation_results.items()), columns=['Metric', 'Value'])
+
+        return plot_path, evaluation_df  # Return both outputs
     else:
-        return "No loss data available."
+        # Return an empty DataFrame with a message
+        empty_df = pd.DataFrame(columns=['Metric', 'Value'])
+        return None, empty_df.append({"Metric": "Message", "Value": "No loss data available."}, ignore_index=True)
 
 def gradio_predict_interface(
     predict_labels_files,  # Optional input
@@ -120,7 +139,12 @@ with gr.Blocks() as demo:
             model_type_train = gr.Radio(choices=['lstm', 'cnn', 'attention'], value='lstm', label="Model Type")
 
             train_button = gr.Button("Start Training")
-            train_output = gr.Image(label="Loss Over Epochs")
+            train_output_plot = gr.Image(label="Loss Over Epochs")
+            train_output_log = gr.Dataframe(
+                headers=["Metric", "Value"],
+                label="Evaluation Results",
+                interactive=False
+            )  # Updated to Dataframe
 
             train_button.click(
                 gradio_train_interface,
@@ -133,7 +157,7 @@ with gr.Blocks() as demo:
                     learning_rate,
                     model_type_train
                 ],
-                outputs=train_output
+                outputs=[train_output_plot, train_output_log]  # Updated outputs
             )
 
         with gr.TabItem("Predict"):

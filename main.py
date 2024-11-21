@@ -1,6 +1,7 @@
 # main.py
 
 import logging
+from src.compute_metrics import compute_metrics
 from src.utils import setup_logging
 from src.data_processing import (
     create_mega_df,
@@ -79,9 +80,10 @@ def train_model_gradio(
     )
     trainer.save_model(output_dir)
     logger.info(f"Model saved to {output_dir}")
-
+    predictions = make_predictions(trainer.model, val_dataset[:]['input_ids'])
     # Extract metrics from the trainer
-    return metrics  # Return metrics to display in Gradio
+    evaluation_results = compute_metrics(predictions, val_dataset[:]['labels'])
+    return metrics, evaluation_results  # Return metrics to display in Gradio
 
 def predict_model_gradio(
     model_path,

@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def compute_metrics(predictions, labels, threshold=0.5, ctn=1):
+def compute_metrics(predictions, labels, threshold=0.5, ctn=30):
     """
     Computes True Positives (TP), False Negatives (FN), and False Positives (FP)
     based on custom definitions.
@@ -44,6 +44,9 @@ def compute_metrics(predictions, labels, threshold=0.5, ctn=1):
                 # For FP, check if prediction is positive where label is negative
                 if pred_binary[i, j] == 1:
                     FP += 1
-
-    logger.debug(f"Computed Metrics - TP: {TP}, FP: {FP}, FN: {FN}")
-    return TP, FN, FP
+    precision = TP / (TP + FP) if (TP + FP) > 0 else 0
+    recall = TP / (TP + FN) if (TP + FN) > 0 else 0
+    f1_socre = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    logger.info(f"Precision: {precision:.4f}, Recall: {recall:.4f}, F1 Score: {f1_socre:.4f}")
+    report_str = {"Precision": precision, "Recall": recall, "F1 Score": f1_socre}
+    return report_str
