@@ -17,106 +17,404 @@ def trim_labels(labels):
 # =========================================================================================================
 # LSTM Model
 # =========================================================================================================
+# class BiTGLSTMConfig(PretrainedConfig):
+#     model_type = "lstm"
 
-class LSTMConfig(PretrainedConfig):
+#     def __init__(self, hidden_size=32, num_layers=2, max_len=150, dropout=0.5, **kwargs):
+#         super().__init__(**kwargs)
+#         self.hidden_size = hidden_size
+#         self.num_layers = num_layers
+#         self.max_len = max_len
+#         self.dropout = dropout
+#         logger.debug(f"LSTMConfig initialized with hidden_size={hidden_size}, num_layers={num_layers}, max_len={max_len}, dropout={dropout}")
+
+# class BiTGLSTMModel(PreTrainedModel):
+#     def __init__(self, config, verbose=False):
+#         super().__init__(config)
+#         self.model = TimeGatedLSTM(
+#             input_size=1,
+#             hidden_size=config.hidden_size,
+#             num_layers=config.num_layers
+#         )
+#         self.max_len = config.max_len
+#         self.output_layer = nn.Linear(config.hidden_size, 1)
+#         if verbose:
+#             logger.info("LSTMModel initialized")
+
+#     def forward(self, input_ids, lengths=None, labels=None):
+#         """
+#         input_ids: [batch_size, seq_len, 2], where the last dimension contains [x, delta_t]
+#         lengths: [batch_size], lengths of each sequence before padding
+#         labels: [batch_size, seq_len]
+#         """
+#         # Separate x and delta_t
+#         x = input_ids[:, :, 0].unsqueeze(-1)  # [batch_size, seq_len, 1]
+#         delta_t = input_ids[:, :, 1].unsqueeze(-1)  # [batch_size, seq_len, 1]
+#         if lengths is None:
+#             lengths = torch.sum(input_ids != 0, dim=-2)[:, 0]
+#         # Pack sequences
+#         x_packed = nn.utils.rnn.pack_padded_sequence(x, lengths.cpu(), batch_first=True, enforce_sorted=False)
+#         delta_t_packed = nn.utils.rnn.pack_padded_sequence(delta_t, lengths.cpu(), batch_first=True, enforce_sorted=False)
+
+#         # Pass through the model
+#         output_packed = self.model(x_packed, delta_t_packed)
+
+#         # Unpack the output
+#         output, _ = nn.utils.rnn.pad_packed_sequence(output_packed, batch_first=True, total_length=self.max_len)
+
+#         # Apply output layer
+#         logits = self.output_layer(output).squeeze(-1)  # [batch_size, seq_len]
+
+#         # Since sequences are padded, we need to mask the logits and labels
+#         if labels is not None:
+#             # Create a mask based on lengths
+#             lengths = lengths.to('cuda')
+#             mask = torch.arange(labels.size(1)).unsqueeze(0).to(labels.device) < lengths.unsqueeze(1)
+#             mask = mask.float()  # Convert to float for multiplication
+
+#             # Compute loss only over valid time steps
+#             loss_fct = nn.BCEWithLogitsLoss()
+#             loss = loss_fct(logits, labels)
+#             loss = (loss * mask).sum() / mask.sum()  # Average loss over all valid time steps
+#         else:
+#             loss = None
+
+#         return {'loss': loss, 'logits': torch.sigmoid(logits)}
+
+
+# class TimeGatedLSTMCell(nn.Module):
+#     def __init__(self, input_size, hidden_size):
+#         super(TimeGatedLSTMCell, self).__init__()
+#         self.hidden_size = hidden_size
+
+#         # Combined weight matrices and biases
+#         self.weight_ih = nn.Linear(input_size, 4 * hidden_size)
+#         self.weight_hh = nn.Linear(hidden_size, 4 * hidden_size)
+
+#         # Time-gating mechanism
+#         self.time_gate = nn.Linear(1, hidden_size)
+
+#     def forward(self, x_packed, delta_t_packed, hx):
+#         h_t, c_t = hx  # Initial hidden and cell states
+
+#         # x_packed is a PackedSequence
+#         x_data, batch_sizes = x_packed.data, x_packed.batch_sizes
+#         delta_t_data = delta_t_packed.data
+
+#         # Prepare lists to hold outputs
+#         outputs = []
+#         h_t_list = []
+#         c_t_list = []
+
+#         # Process the packed data step by step
+#         current_batch_size = batch_sizes[0]
+#         start = 0
+#         for batch_size in batch_sizes:
+#             end = start + batch_size
+
+#             x = x_data[start:end]  # Input at current time step
+#             dt = delta_t_data[start:end]  # Delta_t at current time step
+
+#             # Update h_t and c_t for the reduced batch size
+#             if current_batch_size > batch_size:
+#                 # Remove entries corresponding to finished sequences
+#                 h_t = h_t[:batch_size]
+#                 c_t = c_t[:batch_size]
+#             elif current_batch_size < batch_size:
+#                 # Add entries for new sequences
+#                 extra_h = x.new_zeros(batch_size - current_batch_size, self.hidden_size)
+#                 extra_c = x.new_zeros(batch_size - current_batch_size, self.hidden_size)
+#                 h_t = torch.cat([h_t, extra_h], dim=0)
+#                 c_t = torch.cat([c_t, extra_c], dim=0)
+
+#             current_batch_size = batch_size
+
+#             gates = self.weight_ih(x) + self.weight_hh(h_t)
+
+#             i_gate, f_gate, g_gate, o_gate = gates.chunk(4, dim=1)
+#             i_gate = torch.sigmoid(i_gate)
+#             f_gate = torch.sigmoid(f_gate)
+#             g_gate = torch.tanh(g_gate)
+#             o_gate = torch.sigmoid(o_gate)
+#             t_gate = torch.sigmoid(self.time_gate(dt))
+
+#             # Update cell state and hidden state
+#             c_t = f_gate * c_t + i_gate * g_gate * t_gate
+#             h_t = o_gate * torch.tanh(c_t)
+
+#             outputs.append(h_t)
+#             h_t_list.append(h_t)
+#             c_t_list.append(c_t)
+
+#             start = end
+
+#         # Concatenate all outputs
+#         outputs = torch.cat(outputs, dim=0)
+#         output_packed = nn.utils.rnn.PackedSequence(outputs, batch_sizes)
+
+#         # Final hidden and cell states
+#         h_t_final = h_t_list[-1]
+#         c_t_final = c_t_list[-1]
+
+#         return output_packed, (h_t_final, c_t_final)
+
+
+# class TimeGatedLSTM(nn.Module):
+#     def __init__(self, input_size, hidden_size, num_layers):
+#         super(TimeGatedLSTM, self).__init__()
+#         self.num_layers = num_layers
+#         self.layers = nn.ModuleList([
+#             TimeGatedLSTMCell(input_size if i == 0 else hidden_size, hidden_size)
+#             for i in range(num_layers)
+#         ])
+
+#     def forward(self, x_packed, delta_t_packed, h0=None, c0=None):
+#         """
+#         x_packed: PackedSequence containing input data
+#         delta_t_packed: PackedSequence containing delta_t data
+#         h0, c0: Optional initial hidden and cell states
+#         """
+#         batch_size = x_packed.batch_sizes[0]
+
+#         # Initialize hidden and cell states if not provided
+#         if h0 is None:
+#             h = [x_packed.data.new_zeros(batch_size, self.layers[0].hidden_size) for _ in range(self.num_layers)]
+#         else:
+#             h = [h0_layer for h0_layer in h0]
+
+#         if c0 is None:
+#             c = [x_packed.data.new_zeros(batch_size, self.layers[0].hidden_size) for _ in range(self.num_layers)]
+#         else:
+#             c = [c0_layer for c0_layer in c0]
+
+#         output = x_packed
+
+#         for i, layer in enumerate(self.layers):
+#             output, (h[i], c[i]) = layer(output, delta_t_packed, (h[i], c[i]))
+
+#         return output
+
+class BiTGLSTMConfig(PretrainedConfig):
     model_type = "lstm"
 
-    def __init__(self, hidden_size=32, num_layers=1, max_len=150, dropout=0.5, **kwargs):
+    def __init__(self, hidden_size=32, num_layers=1, max_len=150, dropout=0.5, bidirectional=True, **kwargs):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.max_len = max_len
         self.dropout = dropout
-        logger.debug(f"LSTMConfig initialized with hidden_size={hidden_size}, num_layers={num_layers}, max_len={max_len}, dropout={dropout}")
+        self.bidirectional = bidirectional
+        logger.debug(f"LSTMConfig initialized with hidden_size={hidden_size}, num_layers={num_layers}, max_len={max_len}, dropout={dropout}, bidirectional={bidirectional}")
 
-class LSTMModel(PreTrainedModel):
+class BiTGLSTMModel(PreTrainedModel):
     def __init__(self, config, verbose=False):
         super().__init__(config)
-        self.model = _LSTM(
-            input_size=2, 
+        num_directions = 2 if config.bidirectional else 1
+        self.model = TimeGatedLSTM(
+            input_size=1, 
             hidden_size=config.hidden_size, 
-            num_layers=config.num_layers, 
-            max_len=config.max_len,
-            dropout=config.dropout
+            num_layers=config.num_layers,
+            bidirectional=config.bidirectional
         )
+        self.output_layer = nn.Linear(config.hidden_size * num_directions, config.max_len)
         if verbose:
             logger.info("LSTMModel initialized")
-
-    def forward(self, input_ids, labels=None):
-        x = self.model(input_ids)
-        logits = x  # No sigmoid here
-
+        self.lstm = nn.LSTM(
+            input_size=config.hidden_size*num_directions,
+            hidden_size=config.hidden_size,
+            num_layers=config.num_layers,
+            batch_first=True,
+            bidirectional=True,
+            dropout=config.dropout if config.num_layers > 1 else 0
+        )
+        self.config = config
+    def forward(self, input_ids, lengths=None, labels=None):
+        if lengths is None:
+            lengths = torch.sum(input_ids != 0, dim=-2)[0]
+        x = input_ids[:, :lengths[0], 0].unsqueeze(-1)  # Shape: [batch_size, seq_len, 1]
+        delta_t = input_ids[:, :lengths[0], 1].unsqueeze(-1)  # Shape: [batch_size, seq_len, 1]
+        x, hc = self.model(x, delta_t)
+        # h, c = hc
+        # h = torch.cat(h).view(32,self.config.num_layers*2,-1)[:,:,-1]
+        # c = torch.cat(c).view(32,self.config.num_layers*2,-1)[:,:,-1]
+        # breakpoint()
+        x = torch.max(x, dim=1).values  # Shape: [batch_size, hidden_size * num_directions]
+        x , _ = self.lstm(x)
+        logits = self.output_layer(x).squeeze(-1)  # Shape: [batch_size]
+        
         loss = None
         if labels is not None:
             loss_fct = nn.BCEWithLogitsLoss()
             loss = loss_fct(logits, labels)
         return {'loss': loss, 'logits': torch.sigmoid(logits)}
 
-class _LSTM(nn.Module):
-    def __init__(self, input_size=2, hidden_size=32, num_layers=1, max_len=150, dropout=0.5):
-        super(_LSTM, self).__init__()
-        self.max_len = max_len
-        self.input_size = input_size
-        self.lstm = nn.LSTM(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            batch_first=True,
-            bidirectional=True,
-            dropout=dropout if num_layers > 1 else 0
-        )
-        self.dropout = nn.Dropout(dropout)
-        self.batch_norm = nn.BatchNorm1d(hidden_size * 2 * max_len)
-        self.fc = nn.Linear(hidden_size * 2 * max_len, max_len)
-        logger.debug(f"_LSTM initialized with hidden_size={hidden_size}, num_layers={num_layers}, max_len={max_len}")
+class BiTimeGatedLSTMCell(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(BiTimeGatedLSTMCell, self).__init__()
+        self.hidden_size = hidden_size
 
-    def forward(self, x):
-        # x shape: [batch_size, seq_len, input_size]
+        # Combined weight matrices and biases
+        self.weight_ih = nn.Linear(input_size, 4 * hidden_size)
+        self.weight_hh = nn.Linear(hidden_size, 4 * hidden_size)
 
-        # Create mask where zeros indicate padding positions
-        non_zero_mask = (x != 0).any(dim=2)  # Shape: [batch_size, seq_len]
+        # Time-gating mechanism
+        self.time_gate = nn.Linear(1, hidden_size)
 
-        # Compute lengths by summing the non-zero positions in each sequence
-        lengths = non_zero_mask.sum(dim=1)  # Shape: [batch_size]
-        lengths = lengths.clamp(min=1)  # Avoid zero-length sequences
+    def forward(self, x, delta_t, hx):
+        h_t, c_t = hx  # Initial hidden and cell states
 
-        # Pack the padded sequence
-        packed_input = rnn_utils.pack_padded_sequence(
-            x, lengths.cpu(), batch_first=True, enforce_sorted=False
-        )
+        # Compute gates in a vectorized manner
+        gates = self.weight_ih(x) + self.weight_hh(h_t).unsqueeze(1)
 
-        # Process with LSTM
-        packed_output, (hn, cn) = self.lstm(packed_input)
+        i_gate, f_gate, g_gate, o_gate = gates.chunk(4, dim=2)
+        i_gate = torch.sigmoid(i_gate)
+        f_gate = torch.sigmoid(f_gate)
+        g_gate = torch.tanh(g_gate)
+        o_gate = torch.sigmoid(o_gate)
+        t_gate = torch.sigmoid(self.time_gate(delta_t))
 
-        # Unpack the sequence
-        output, _ = rnn_utils.pad_packed_sequence(
-            packed_output, batch_first=True, total_length=self.max_len
-        )
+        # Update cell state and hidden state
+        c_t = f_gate * c_t.unsqueeze(1) + i_gate * g_gate * t_gate
+        h_t = o_gate * torch.tanh(c_t)
 
-        # Apply mask to zero out padding positions in the output
-        mask = non_zero_mask.unsqueeze(2).expand_as(output)
-        # plt.plot(output[0,:,])
-        # plt.savefig('test_features_before.png')
-        # plt.close()
-        output = output * mask
-        # plt.plot(output[0,:,])
-        # plt.savefig('test_features_after.png')
-        # plt.close()
-        # breakpoint()
+        h_t_final = h_t[:, -1, :]  # Get the last time step
+        c_t_final = c_t[:, -1, :]  # Get the last time step
 
-        # # Pooling: Mean over the sequence length
-        # output_pooled = torch.mean(output, dim=1)  # Shape: [batch_size, hidden_size * 2]
+        return h_t, (h_t_final, c_t_final)
 
-        # Apply dropout and batch normalization
-        # output_pooled = self.dropout(output_pooled)
-        # output_pooled = self.batch_norm(output_pooled)       
-        output = output.view(output.size(0), -1)
-        output = self.dropout(output)
-        output = self.batch_norm(output)
-        # Pass through the fully connected layer
-        x = self.fc(output)  # Shape: [batch_size, max_len]
+class TimeGatedLSTM(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, bidirectional=False):
+        super(TimeGatedLSTM, self).__init__()
+        self.num_layers = num_layers
+        self.bidirectional = bidirectional
+        self.hidden_size = hidden_size
+        num_directions = 2 if bidirectional else 1
 
-        return x
+        self.layers = nn.ModuleList()
+        for layer_idx in range(num_layers):
+            for direction in range(num_directions):
+                input_dim = input_size if layer_idx == 0 else hidden_size * num_directions
+                self.layers.append(BiTimeGatedLSTMCell(input_dim, hidden_size))
+
+    def forward(self, x, delta_t):
+        batch_size = x.size(0)
+        seq_len = x.size(1)
+        device = x.device
+        num_directions = 2 if self.bidirectional else 1
+
+        if self.bidirectional:
+            h = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers * num_directions)]
+            c = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers * num_directions)]
+
+            output_forward = x
+            output_backward = torch.flip(x, dims=[1])
+            delta_t_backward = torch.flip(delta_t, dims=[1])
+
+            for layer_idx in range(self.num_layers):
+                layer_fwd_idx = layer_idx * num_directions
+                layer_bwd_idx = layer_fwd_idx + 1
+
+                # Forward pass
+                layer_fwd = self.layers[layer_fwd_idx]
+                output_forward, (h[layer_fwd_idx], c[layer_fwd_idx]) = layer_fwd(
+                    output_forward, delta_t, (h[layer_fwd_idx], c[layer_fwd_idx])
+                )
+
+                # Backward pass
+                layer_bwd = self.layers[layer_bwd_idx]
+                output_backward, (h[layer_bwd_idx], c[layer_bwd_idx]) = layer_bwd(
+                    output_backward, delta_t_backward, (h[layer_bwd_idx], c[layer_bwd_idx])
+                )
+                output_backward = torch.flip(output_backward, dims=[1])  # Reverse outputs back to original order
+
+                # Concatenate outputs
+                output = torch.cat((output_forward, output_backward), dim=2)
+
+                # Prepare inputs for next layer
+                output_forward = output
+                output_backward = torch.flip(output, dims=[1])
+                delta_t_backward = torch.flip(delta_t, dims=[1])
+
+            return output, (h, c)
+        else:
+            h = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers)]
+            c = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers)]
+
+            for layer_idx in range(self.num_layers):
+                layer = self.layers[layer_idx]
+                x, (h[layer_idx], c[layer_idx]) = layer(x, delta_t, (h[layer_idx], c[layer_idx]))
+
+            return x
+
+
+
+
+
+# class _LSTM(nn.Module):
+#     def __init__(self, input_size=2, hidden_size=32, num_layers=1, max_len=150, dropout=0.5):
+#         super(_LSTM, self).__init__()
+#         self.max_len = max_len
+#         self.input_size = input_size
+#         self.lstm = nn.LSTM(
+#             input_size=input_size,
+#             hidden_size=hidden_size,
+#             num_layers=num_layers,
+#             batch_first=True,
+#             bidirectional=True,
+#             dropout=dropout if num_layers > 1 else 0
+#         )
+#         self.dropout = nn.Dropout(dropout)
+#         self.batch_norm = nn.BatchNorm1d(hidden_size * 2 * max_len)
+#         self.fc = nn.Linear(hidden_size * 2 * max_len, max_len)
+#         logger.debug(f"_LSTM initialized with hidden_size={hidden_size}, num_layers={num_layers}, max_len={max_len}")
+
+#     def forward(self, x):
+#         # x shape: [batch_size, seq_len, input_size]
+
+#         # Create mask where zeros indicate padding positions
+#         non_zero_mask = (x != 0).any(dim=2)  # Shape: [batch_size, seq_len]
+
+#         # Compute lengths by summing the non-zero positions in each sequence
+#         lengths = non_zero_mask.sum(dim=1)  # Shape: [batch_size]
+#         lengths = lengths.clamp(min=1)  # Avoid zero-length sequences
+
+#         # Pack the padded sequence
+#         packed_input = rnn_utils.pack_padded_sequence(
+#             x, lengths.cpu(), batch_first=True, enforce_sorted=False
+#         )
+
+#         # Process with LSTM
+#         packed_output, (hn, cn) = self.lstm(packed_input)
+
+#         # Unpack the sequence
+#         output, _ = rnn_utils.pad_packed_sequence(
+#             packed_output, batch_first=True, total_length=self.max_len
+#         )
+
+#         # Apply mask to zero out padding positions in the output
+#         mask = non_zero_mask.unsqueeze(2).expand_as(output)
+#         # plt.plot(output[0,:,])
+#         # plt.savefig('test_features_before.png')
+#         # plt.close()
+#         output = output * mask
+#         # plt.plot(output[0,:,])
+#         # plt.savefig('test_features_after.png')
+#         # plt.close()
+#         # breakpoint()
+
+#         # # Pooling: Mean over the sequence length
+#         # output_pooled = torch.mean(output, dim=1)  # Shape: [batch_size, hidden_size * 2]
+
+#         # Apply dropout and batch normalization
+#         # output_pooled = self.dropout(output_pooled)
+#         # output_pooled = self.batch_norm(output_pooled)       
+#         output = output.view(output.size(0), -1)
+#         output = self.dropout(output)
+#         output = self.batch_norm(output)
+#         # Pass through the fully connected layer
+#         x = self.fc(output)  # Shape: [batch_size, max_len]
+
+#         return x
     
 # =========================================================================================================
 # CNN Model

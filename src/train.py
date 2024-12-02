@@ -3,7 +3,7 @@
 import logging
 from transformers import Trainer, TrainingArguments
 import torch
-from .model import LSTMConfig, LSTMModel, CNNConfig, CNNModel, AttentionConfig, AttentionModel
+from .model import BiTGLSTMConfig, BiTGLSTMModel, CNNConfig, CNNModel, AttentionConfig, AttentionModel
 from .data_processing import CustomDataset, CustomDatasetCNN
 from torchinfo import summary
 
@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, batch_size=32, learning_rate=0.001, model_type='lstm'):
     if model_type == 'lstm':
-        config = LSTMConfig(hidden_size=4, num_layers=1, max_len=train_dataset.features.shape[1])
-        model = LSTMModel(config=config, verbose=True)
+        config = BiTGLSTMConfig(hidden_size=train_dataset.features.shape[1], num_layers=1, max_len=train_dataset.features.shape[1])
+        model = BiTGLSTMModel(config=config, verbose=True)
     elif model_type == 'cnn':
         config = CNNConfig(seq_length=train_dataset.features.shape[1], num_features=train_dataset.features.shape[2])
         model = CNNModel(config=config, verbose=True)
@@ -26,7 +26,8 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
         model = AttentionModel(config=config, verbose=True)
     else:
         raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention'.")
-    sample_input = train_dataset[0:32]['input_ids']
+    sample_input = (train_dataset[0:32]['input_ids'], train_dataset[0:32]['lengths'])
+
     print(summary(model, input_data = (sample_input)))
     training_args = TrainingArguments(
         output_dir=output_dir,

@@ -110,7 +110,7 @@ def add_delta_t_features(mega_features):
     max_len = mega_features.shape[1]
     delta_t = mega_features.progress_apply(lambda x: create_delta_t_feature(x, max_len), axis=1)
     final_features = np.dstack((mega_features.values, np.vstack(delta_t.values)))
-    logger.info(f"Final features shape after adding delta t: {final_features.shape}")
+    logger.info(f"Final features shape after adding delta t and length: {final_features.shape}")
     return final_features
 
 def sample_and_scale(final_features, mega_labels, sample_size=1000):
@@ -127,33 +127,33 @@ def sample_and_scale(final_features, mega_labels, sample_size=1000):
             sampled_features (torch.Tensor): Sampled and scaled features.
             sampled_labels (torch.Tensor or None): Sampled and scaled labels or None if labels are not provided.
     """
-    logger.info("Sampling and scaling features and labels")
-    num_available = len(final_features)
-    actual_sample_size = min(sample_size, num_available)
-    indices = np.random.choice(num_available, size=actual_sample_size, replace=False)
-    sampled_features = final_features[indices]
+    # logger.info("Sampling and scaling features and labels")
+    # num_available = len(final_features)
+    # actual_sample_size = min(sample_size, num_available)
+    # indices = np.random.choice(num_available, size=actual_sample_size, replace=False)
+    # sampled_features = final_features[indices]
 
-    # Initialize sampled_labels as None
-    sampled_labels = None
+    # # Initialize sampled_labels as None
+    # sampled_labels = None
+
+    # if mega_labels is not None:
+    #     sampled_labels = mega_labels.values[indices]
+
+    # # # Separate features and delta_t features
+    # # features = sampled_features[:, :, 0]
+    # # delta_t = sampled_features[:, :, 1]
+
+    # # # Scale features
+    # # scaler_features = StandardScaler()
+    # # features = scaler_features.fit_transform(features)
+
+    # # # Combine scaled features with delta_t (assuming delta_t doesn't need scaling)
+    # # scaled_features = np.stack((features, delta_t), axis=-1)
+
+    sampled_features = torch.from_numpy(final_features[:sample_size]).float()
 
     if mega_labels is not None:
-        sampled_labels = mega_labels.values[indices]
-
-    # # Separate features and delta_t features
-    # features = sampled_features[:, :, 0]
-    # delta_t = sampled_features[:, :, 1]
-
-    # # Scale features
-    # scaler_features = StandardScaler()
-    # features = scaler_features.fit_transform(features)
-
-    # # Combine scaled features with delta_t (assuming delta_t doesn't need scaling)
-    # scaled_features = np.stack((features, delta_t), axis=-1)
-
-    sampled_features = torch.from_numpy(sampled_features).float()
-
-    if sampled_labels is not None:
-        sampled_labels = torch.from_numpy(sampled_labels).float()
+        sampled_labels = torch.from_numpy(mega_labels.values[:sample_size]).float()
         logger.info(f"Sampled Features shape: {sampled_features.shape}")
         logger.info(f"Sampled Labels shape: {sampled_labels.shape}")
     else:
@@ -224,16 +224,25 @@ def remove_nan_from_features(sampled_features, max_length=200):
     return output_features
 
 # Custom Datasets
+
+def calculate_non_zero_length(features):
+    non_zero_lengths = []
+    for i in range(features.size(0)):
+        non_zero_length = torch.sum(features[i, :, 0] != 0)
+        non_zero_lengths.append(non_zero_length)
+    return torch.tensor(non_zero_lengths)
+
 class CustomDataset(Dataset):
     def __init__(self, features, labels):
         self.features = features
+        self.lengths = calculate_non_zero_length(features)
         self.labels = labels
 
     def __len__(self):
         return len(self.features)
 
     def __getitem__(self, idx):
-        return {'input_ids': self.features[idx], 'labels': self.labels[idx]}
+        return {'input_ids': self.features[idx], 'lengths': self.lengths[idx], 'labels': self.labels[idx]}
 
 class CustomDatasetCNN(Dataset):
     def __init__(self, features, labels):

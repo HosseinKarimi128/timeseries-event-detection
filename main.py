@@ -27,7 +27,7 @@ def train_model_gradio(
     labels_paths=['data/Gaussian_Cp_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
     features_paths=['data/time_series_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
     sample_size=1000,
-    epochs=100,
+    epochs=10,
     batch_size=32,
     learning_rate=0.001,
     output_dir='results',
@@ -49,7 +49,19 @@ def train_model_gradio(
     final_features = add_delta_t_features(mega_features)
     sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
     sampled_features = remove_nan_from_features(sampled_features, max_len)
-
+    # plt.scatter(range(len(mega_features.iloc[0])),mega_features.iloc[0], label='displacements', color='blue') 
+    # plt.savefig('feature.png')
+    # plt.close()
+    # fig, ax = plt.subplots()
+    # ax2 = ax.twinx()
+    # ax.scatter(range(len(sampled_features[0,:119,0])),sampled_features[0,:119,0], label='displacements', color='blue')
+    # ax.bar(range(len(sampled_features[0,:119,0])), sampled_features[0,:119,1], alpha=0.5, label='time-delta', color='green')
+    # # ax2.plot(sampled_labels[0,:119], label='label', color='cyan')
+    # ax.legend()
+    # # ax2.legend()
+    # plt.tight_layout()
+    # plt.savefig('feature_with_delta_t.png')
+    # exit()
     # Label Trimming
     trimmed_labels = trim_labels(sampled_labels)
 
@@ -112,7 +124,12 @@ def predict_model_gradio(
 
     # Data Processing for Prediction
     mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
+
+    # plt.close()
     final_features = add_delta_t_features(mega_features)
+    # plt.plot(final_features[0,:,])
+    # plt.savefig('test_features_after.png')
+    # plt.close()
     # if input_indices is not None:
     #     if (input_indices[1] - input_indices[0]) > 2:
     #         sampled_original_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
@@ -142,10 +159,10 @@ def predict_model_gradio(
         trimmed_labels = None
 
     # Load configuration based on model type
-    from src.model import LSTMConfig, CNNConfig, AttentionConfig
+    from src.model import BiTGLSTMConfig, CNNConfig, AttentionConfig
 
     if model_type == 'lstm':
-        config = LSTMConfig.from_pretrained(model_path)
+        config = BiTGLSTMConfig.from_pretrained(model_path)
     elif model_type == 'cnn':
         config = CNNConfig.from_pretrained(model_path)
     elif model_type == 'attention':

@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def compute_metrics(predictions, labels, threshold=0.5, ctn=30):
+def compute_metrics(predictions, labels, threshold=0.1, ctn=30):
     """
     Computes True Positives (TP), False Negatives (FN), and False Positives (FP)
     based on custom definitions.

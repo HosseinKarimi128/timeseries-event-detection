@@ -8,7 +8,7 @@ import pandas as pd
 import random
 from tqdm import tqdm
 import logging
-from .model import LSTMConfig, CNNConfig, AttentionConfig, LSTMModel, CNNModel, AttentionModel
+from .model import BiTGLSTMConfig, CNNConfig, AttentionConfig, BiTGLSTMModel, CNNModel, AttentionModel
 from torch.utils.data import DataLoader
 import os
 import numpy as np
@@ -19,7 +19,7 @@ def load_model(model_path, config, model_type='lstm'):
     logger.info(f"Loading {model_type.upper()} model from {model_path}")
 
     if model_type == 'lstm':
-        model = LSTMModel.from_pretrained(model_path, config=config)
+        model = BiTGLSTMModel.from_pretrained(model_path, config=config)
     elif model_type == 'cnn':
         model = CNNModel.from_pretrained(model_path, config=config)
     elif model_type == 'attention':
