@@ -56,7 +56,8 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
     all_features = []
     all_labels = []
 
-    for i in range(len(features)):
+    # Add progress bar for features processing
+    for i in tqdm(range(len(features)), desc="Processing features"):
         features_path = features[i]
         features_df = pd.read_csv(features_path, header=None)
 
@@ -90,24 +91,30 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
             all_labels.append(dummy_labels)
 
     if all_features:
+        logger.info("Concatenating features...")
         mega_features = pd.concat(all_features, axis=0).reset_index(drop=True)
         logger.info(f"Mega Features shape: {mega_features.shape}")
-        # Save features cache
+        
+        logger.info("Saving features cache...")
         mega_features.to_csv(features_cache, index=False)
         logger.info(f"Cached features saved to {features_cache}")
-        # Convert to torch tensor and move to specified device
+        
+        logger.info("Converting features to tensor...")
         mega_features = torch.tensor(mega_features.values, device=device)
     else:
         mega_features = torch.tensor([], device=device)
         logger.warning("No features provided. Mega Features is empty.")
 
     if labels:
+        logger.info("Concatenating labels...")
         mega_labels = pd.concat(all_labels, axis=0).reset_index(drop=True)
         logger.info(f"Mega Labels shape: {mega_labels.shape}")
-        # Save labels cache
+        
+        logger.info("Saving labels cache...")
         mega_labels.to_csv(labels_cache, index=False)
         logger.info(f"Cached labels saved to {labels_cache}")
-        # Convert to torch tensor and move to specified device
+        
+        logger.info("Converting labels to tensor...")
         mega_labels = torch.tensor(mega_labels.values, device=device)
     else:
         mega_labels = None
