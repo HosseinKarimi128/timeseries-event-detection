@@ -39,9 +39,9 @@ def train_model_gradio(
     logger = logging.getLogger(__name__)
     logger.info("Starting training via Gradio interface")
 
-    if torch.cuda.is_available():
-        current_device = torch.cuda.current_device()
-        logger.info(f"Using CUDA Device {current_device}: {torch.cuda.get_device_name(current_device)}")
+    # if torch.cuda.is_available():
+    #     current_device = torch.cuda.current_device()
+    #     logger.info(f"Using CUDA Device {current_device}: {torch.cuda.get_device_name(current_device)}")
 
     labels_paths = [Path(path) for path in labels_paths]
     features_paths = [Path(path) for path in features_paths]
@@ -49,9 +49,10 @@ def train_model_gradio(
 
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-
+    device = torch.device("cuda:1")
+    logger.info(f"Using device: {device}")
     # Data Processing for Training
-    mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len, cache_dir="cached_data")
+    mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len, cache_dir="cached_data", device=device)
     final_features = add_delta_t_features(mega_features)
     sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
     sampled_features = remove_nan_from_features(sampled_features, max_len)
