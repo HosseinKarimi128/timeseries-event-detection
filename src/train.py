@@ -52,7 +52,6 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
         num_train_epochs=epochs,
         save_steps=10000,
         save_total_limit=2,
-        n_gpu=1,
         logging_dir='logs/',
         logging_steps=100,
         report_to=["tensorboard"]
