@@ -46,10 +46,6 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
         logger.info("Loading from cached files")
         mega_features = pd.read_csv(features_cache)
         mega_labels = pd.read_csv(labels_cache) if labels else None
-        # Convert to torch tensors and move to specified device
-        mega_features = torch.tensor(mega_features.values, device=device)
-        if mega_labels is not None:
-            mega_labels = torch.tensor(mega_labels.values, device=device)
         return mega_features, mega_labels
 
     logger.info("Cache not found. Creating mega DataFrame from labels and features")
@@ -98,11 +94,8 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
         logger.info("Saving features cache...")
         mega_features.to_csv(features_cache, index=False)
         logger.info(f"Cached features saved to {features_cache}")
-        
-        logger.info("Converting features to tensor...")
-        mega_features = torch.tensor(mega_features.values, device=device)
     else:
-        mega_features = torch.tensor([], device=device)
+        mega_features = pd.DataFrame()
         logger.warning("No features provided. Mega Features is empty.")
 
     if labels:
@@ -113,9 +106,6 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
         logger.info("Saving labels cache...")
         mega_labels.to_csv(labels_cache, index=False)
         logger.info(f"Cached labels saved to {labels_cache}")
-        
-        logger.info("Converting labels to tensor...")
-        mega_labels = torch.tensor(mega_labels.values, device=device)
     else:
         mega_labels = None
         logger.info("No labels provided. Mega Labels is set to None.")
