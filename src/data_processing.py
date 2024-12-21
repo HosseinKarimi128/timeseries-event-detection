@@ -49,13 +49,13 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
         # Read features and convert to pandas DataFrame
         mega_features = dd.read_csv(features_cache, 
                                   blocksize='64MB')\
-                         .compute(scheduler='threads')  # Returns pandas DataFrame
+                         .compute(scheduler='threads')[:, :max_len]  # Returns pandas DataFrame
         
         # Read labels if they exist and convert to pandas DataFrame
         if labels and os.path.exists(labels_cache):
             mega_labels = dd.read_csv(labels_cache,
                                     blocksize='64MB')\
-                           .compute(scheduler='threads')  # Returns pandas DataFrame
+                           .compute(scheduler='threads')[:, :max_len]  # Returns pandas DataFrame
         else:
             mega_labels = None
             
@@ -67,22 +67,33 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
     all_labels = []
 
     # Add progress bar for features processing
+    import dask.dataframe as dd
+    
+    # Process features files using dask
+    logger.info("Processing features files with dask")
+    dask_features = []
     for i in tqdm(range(len(features)), desc="Processing features"):
         features_path = features[i]
-        features_df = pd.read_csv(features_path, header=None)
-
+        # Read with dask
+        ddf = dd.read_csv(features_path, header=None, blocksize='64MB')
+        # Convert to pandas
+        features_df = ddf.compute(scheduler='threads')
+        
         if len(features_df) < max_len:
-            features_df = pad_data_frame(features_df, max_len)
+            features_df = pad_data_frame(features_df, max_len) 
         else:
             features_df = truncate_data_frame(features_df, max_len)
-
+            
         all_features.append(features_df)
         logger.debug(f"Processed features file {i+1}/{len(features)}: Features shape {features_df.shape}")
 
         if labels:
             if i < len(labels):
                 labels_path = labels[i]
-                labels_df = pd.read_csv(labels_path, header=None)
+                # Read labels with dask
+                ddf_labels = dd.read_csv(labels_path, header=None, blocksize='64MB')
+                # Convert to pandas
+                labels_df = ddf_labels.compute(scheduler='threads')
 
                 if len(labels_df) < max_len:
                     labels_df = pad_data_frame(labels_df, max_len)

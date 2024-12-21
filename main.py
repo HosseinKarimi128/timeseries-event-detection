@@ -123,7 +123,7 @@ def predict_model_gradio(
 
     labels_paths = [Path(path) for path in labels_paths] if labels_paths else []
     features_paths = [Path(path) for path in features_paths]
-    max_len = 267  # Adjust based on your data
+    max_len = 300  # Adjust based on your data
 
     # Create output directory if it doesn't exist
     output_dir = Path(predictions_csv).parent
