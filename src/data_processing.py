@@ -81,11 +81,13 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
         
         if len(features_df) < max_len:
             features_df = pad_data_frame(features_df, max_len) 
+            logger.info(f"Padded features file {i+1}/{len(features)}: Features shape {features_df.shape}")
         else:
             features_df = truncate_data_frame(features_df, max_len)
+            logger.info(f"Truncated features file {i+1}/{len(features)}: Features shape {features_df.shape}")
             
         all_features.append(features_df)
-        logger.debug(f"Processed features file {i+1}/{len(features)}: Features shape {features_df.shape}")
+        logger.info(f"Processed features file {i+1}/{len(features)}: Features shape {features_df.shape}")
 
         if labels:
             if i < len(labels):
@@ -101,13 +103,13 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
                     labels_df = truncate_data_frame(labels_df, max_len)
 
                 all_labels.append(labels_df)
-                logger.debug(f"Processed labels file {i+1}/{len(labels)}: Labels shape {labels_df.shape}")
+                logger.info(f"Processed labels file {i+1}/{len(labels)}: Labels shape {labels_df.shape}")
             else:
                 logger.warning(f"No corresponding label file for features file {i+1}. Filling with zeros.")
                 dummy_labels = pd.DataFrame(0, index=range(max_len), columns=[0])
                 all_labels.append(dummy_labels)
         else:
-            logger.debug(f"No labels provided for features file {i+1}. Filling labels with zeros.")
+            logger.info(f"No labels provided for features file {i+1}. Filling labels with zeros.")
             dummy_labels = pd.DataFrame(0, index=range(max_len), columns=[0])
             all_labels.append(dummy_labels)
 
