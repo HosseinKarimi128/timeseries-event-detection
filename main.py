@@ -45,7 +45,7 @@ def train_model_gradio(
 
     labels_paths = [Path(path) for path in labels_paths]
     features_paths = [Path(path) for path in features_paths]
-    max_len = 267  # Adjust based on your data
+    max_len = 300  # Adjust based on your data
 
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
