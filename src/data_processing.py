@@ -49,13 +49,13 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
         # Read features and convert to pandas DataFrame
         mega_features = dd.read_csv(features_cache, 
                                   blocksize='64MB')\
-                         .compute(scheduler='threads')[:, :max_len]  # Returns pandas DataFrame
+                         .compute(scheduler='threads')  # Returns pandas DataFrame
         
         # Read labels if they exist and convert to pandas DataFrame
         if labels and os.path.exists(labels_cache):
             mega_labels = dd.read_csv(labels_cache,
                                     blocksize='64MB')\
-                           .compute(scheduler='threads')[:, :max_len]  # Returns pandas DataFrame
+                           .compute(scheduler='threads')  # Returns pandas DataFrame
         else:
             mega_labels = None
             
