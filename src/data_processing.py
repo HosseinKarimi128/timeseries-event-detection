@@ -20,22 +20,34 @@ def truncate_data_frame(df, max_len):
     logger.debug(f"Truncating DataFrame to max length {max_len}")
     return df.iloc[:, :max_len]
 
-def create_mega_df(labels, features, max_len):
+def create_mega_df(labels, features, max_len, cache_dir="cached_data"):
     """
-    Creates combined DataFrames for features and labels.
-    If labels are not provided, labels DataFrame will be filled with zeros or set to None.
-
+    Creates combined DataFrames for features and labels with caching support.
+    
     Args:
         labels (list of Path): List of label file paths. Can be empty.
         features (list of Path): List of feature file paths.
         max_len (int): Maximum sequence length.
+        cache_dir (str): Directory to store cached files.
 
     Returns:
         tuple: (mega_features, mega_labels)
-            mega_features (pd.DataFrame): Combined features.
-            mega_labels (pd.DataFrame or None): Combined labels or None if not provided.
     """
-    logger.info("Creating mega DataFrame from labels and features")
+    # Create cache directory if it doesn't exist
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    # Define cache file paths
+    features_cache = os.path.join(cache_dir, f"mega_features_len{max_len}.csv")
+    labels_cache = os.path.join(cache_dir, f"mega_labels_len{max_len}.csv")
+    
+    # Check if cached files exist
+    if os.path.exists(features_cache) and (not labels or os.path.exists(labels_cache)):
+        logger.info("Loading from cached files")
+        mega_features = pd.read_csv(features_cache)
+        mega_labels = pd.read_csv(labels_cache) if labels else None
+        return mega_features, mega_labels
+
+    logger.info("Cache not found. Creating mega DataFrame from labels and features")
     all_features = []
     all_labels = []
 
@@ -75,6 +87,9 @@ def create_mega_df(labels, features, max_len):
     if all_features:
         mega_features = pd.concat(all_features, axis=0).reset_index(drop=True)
         logger.info(f"Mega Features shape: {mega_features.shape}")
+        # Save features cache
+        mega_features.to_csv(features_cache, index=False)
+        logger.info(f"Cached features saved to {features_cache}")
     else:
         mega_features = pd.DataFrame()
         logger.warning("No features provided. Mega Features is empty.")
@@ -82,6 +97,9 @@ def create_mega_df(labels, features, max_len):
     if labels:
         mega_labels = pd.concat(all_labels, axis=0).reset_index(drop=True)
         logger.info(f"Mega Labels shape: {mega_labels.shape}")
+        # Save labels cache
+        mega_labels.to_csv(labels_cache, index=False)
+        logger.info(f"Cached labels saved to {labels_cache}")
     else:
         mega_labels = None
         logger.info("No labels provided. Mega Labels is set to None.")

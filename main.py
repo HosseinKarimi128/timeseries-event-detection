@@ -46,7 +46,7 @@ def train_model_gradio(
     os.makedirs(output_dir, exist_ok=True)
 
     # Data Processing for Training
-    mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
+    mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len, cache_dir="cached_data")
     final_features = add_delta_t_features(mega_features)
     sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
     sampled_features = remove_nan_from_features(sampled_features, max_len)
