@@ -75,9 +75,9 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
     for i in tqdm(range(len(features)), desc="Processing features"):
         features_path = features[i]
         # Read with dask
-        ddf = dd.read_csv(features_path, header=None, blocksize='64MB')
+        ddf = dd.read_csv(features_path, header=None, blocksize='64MB', assume_missing=True)
         # Convert to pandas
-        features_df = ddf.compute(scheduler='threads')
+        features_df = ddf.compute(scheduler='threads', assume_missing=True)
         
         if len(features_df) < max_len:
             features_df = pad_data_frame(features_df, max_len) 
@@ -91,9 +91,9 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
             if i < len(labels):
                 labels_path = labels[i]
                 # Read labels with dask
-                ddf_labels = dd.read_csv(labels_path, header=None, blocksize='64MB')
+                ddf_labels = dd.read_csv(labels_path, header=None, blocksize='64MB', assume_missing=True)
                 # Convert to pandas
-                labels_df = ddf_labels.compute(scheduler='threads')
+                labels_df = ddf_labels.compute(scheduler='threads', assume_missing=True)
 
                 if len(labels_df) < max_len:
                     labels_df = pad_data_frame(labels_df, max_len)
