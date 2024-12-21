@@ -19,15 +19,11 @@ from src.predict import load_model, make_predictions, save_predictions_to_csv, p
 from sklearn.model_selection import train_test_split
 import random
 from pathlib import Path
-from numba import jit, cuda 
-import torch.cuda
 import torch
 import os
 from matplotlib import pyplot as plt
 
-torch.cuda.set_device(1)
 
-@jit(target_backend='cuda', device=1)
 def train_model_gradio(
     labels_paths=['data/Gaussian_Cp_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
     features_paths=['data/time_series_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],

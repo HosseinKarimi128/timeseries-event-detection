@@ -20,7 +20,7 @@ def truncate_data_frame(df, max_len):
     logger.debug(f"Truncating DataFrame to max length {max_len}")
     return df.iloc[:, :max_len]
 
-def create_mega_df(labels, features, max_len, cache_dir="cached_data"):
+def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="cpu"):
     """
     Creates combined DataFrames for features and labels with caching support.
     
@@ -29,6 +29,7 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data"):
         features (list of Path): List of feature file paths.
         max_len (int): Maximum sequence length.
         cache_dir (str): Directory to store cached files.
+        device (str): Device to use for processing ('cpu' or 'cuda')
 
     Returns:
         tuple: (mega_features, mega_labels)
@@ -45,6 +46,10 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data"):
         logger.info("Loading from cached files")
         mega_features = pd.read_csv(features_cache)
         mega_labels = pd.read_csv(labels_cache) if labels else None
+        # Convert to torch tensors and move to specified device
+        mega_features = torch.tensor(mega_features.values, device=device)
+        if mega_labels is not None:
+            mega_labels = torch.tensor(mega_labels.values, device=device)
         return mega_features, mega_labels
 
     logger.info("Cache not found. Creating mega DataFrame from labels and features")
@@ -90,8 +95,10 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data"):
         # Save features cache
         mega_features.to_csv(features_cache, index=False)
         logger.info(f"Cached features saved to {features_cache}")
+        # Convert to torch tensor and move to specified device
+        mega_features = torch.tensor(mega_features.values, device=device)
     else:
-        mega_features = pd.DataFrame()
+        mega_features = torch.tensor([], device=device)
         logger.warning("No features provided. Mega Features is empty.")
 
     if labels:
@@ -100,6 +107,8 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data"):
         # Save labels cache
         mega_labels.to_csv(labels_cache, index=False)
         logger.info(f"Cached labels saved to {labels_cache}")
+        # Convert to torch tensor and move to specified device
+        mega_labels = torch.tensor(mega_labels.values, device=device)
     else:
         mega_labels = None
         logger.info("No labels provided. Mega Labels is set to None.")
