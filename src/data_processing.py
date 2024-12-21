@@ -44,8 +44,22 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
     # Check if cached files exist
     if os.path.exists(features_cache) and (not labels or os.path.exists(labels_cache)):
         logger.info("Loading from cached files")
-        mega_features = pd.read_csv(features_cache)
-        mega_labels = pd.read_csv(labels_cache) if labels else None
+        import dask.dataframe as dd
+        
+        # Read features and convert to pandas DataFrame
+        mega_features = dd.read_csv(features_cache, 
+                                  blocksize='64MB')\
+                         .compute(scheduler='threads')  # Returns pandas DataFrame
+        
+        # Read labels if they exist and convert to pandas DataFrame
+        if labels and os.path.exists(labels_cache):
+            mega_labels = dd.read_csv(labels_cache,
+                                    blocksize='64MB')\
+                           .compute(scheduler='threads')  # Returns pandas DataFrame
+        else:
+            mega_labels = None
+            
+        logger.info("Successfully converted Dask DataFrames to pandas DataFrames")
         return mega_features, mega_labels
 
     logger.info("Cache not found. Creating mega DataFrame from labels and features")
