@@ -12,3 +12,4 @@ torchinfo
 torchviz
 datasets
 numba
+dask
