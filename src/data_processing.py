@@ -85,7 +85,6 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
             features_df = truncate_data_frame(features_df, max_len)
             
         all_features.append(features_df)
-        logger.info(f"Processed features file {i+1}/{len(features)}: Features shape {features_df.shape}")
 
         if labels:
             if i < len(labels):
