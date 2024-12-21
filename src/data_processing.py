@@ -79,7 +79,7 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
         # Convert to pandas
         features_df = ddf.compute(scheduler='threads', assume_missing=True)
         
-        if len(features_df) < max_len:
+        if len(features_df.columns) < max_len:
             features_df = pad_data_frame(features_df, max_len) 
             logger.info(f"Padded features file {i+1}/{len(features)}: Features shape {features_df.shape}")
         else:
@@ -97,7 +97,7 @@ def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="c
                 # Convert to pandas
                 labels_df = ddf_labels.compute(scheduler='threads', assume_missing=True)
 
-                if len(labels_df) < max_len:
+                if len(labels_df.columns) < max_len:
                     labels_df = pad_data_frame(labels_df, max_len)
                 else:
                     labels_df = truncate_data_frame(labels_df, max_len)
