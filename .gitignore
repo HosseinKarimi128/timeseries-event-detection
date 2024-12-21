@@ -164,6 +164,7 @@ cython_debug/
 results/
 logs/
 data/
+cached_data/
 *.png
 *.csv
 # Ignore specific Python files
