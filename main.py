@@ -154,7 +154,8 @@ def predict_model_gradio(
         #     sampled_original_features, sampled_labels = just_scale(final_features, mega_labels)
     if input_indices is not None:
         final_features = final_features[input_indices[0]:input_indices[1]]
-        mega_labels = mega_labels[input_indices[0]:input_indices[1]]
+        if mega_labels is not None:
+            mega_labels = mega_labels[input_indices[0]:input_indices[1]]
     sampled_original_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
 
     sampled_features = remove_nan_from_features(sampled_original_features, max_len)
