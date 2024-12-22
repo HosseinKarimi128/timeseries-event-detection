@@ -42,13 +42,11 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
 
     print(summary(model, input_data = (sample_input)))
     training_args = TrainingArguments(
-        local_rank=-1,
         output_dir=output_dir,
         evaluation_strategy="epoch",
         learning_rate=learning_rate,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
-        ddp_backend=None,
         num_train_epochs=epochs,
         save_steps=10000,
         save_total_limit=2,

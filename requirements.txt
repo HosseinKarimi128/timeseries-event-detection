@@ -11,5 +11,3 @@ transformers
 torchinfo
 torchviz
 datasets
-numba
-dask

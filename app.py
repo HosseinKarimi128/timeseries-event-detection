@@ -203,4 +203,4 @@ with gr.Blocks() as demo:
                 outputs=[prediction_output, plot_output]
             )
 
-demo.launch(server_name="0.0.0.0")
+demo.launch()

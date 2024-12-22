@@ -20,115 +20,68 @@ def truncate_data_frame(df, max_len):
     logger.debug(f"Truncating DataFrame to max length {max_len}")
     return df.iloc[:, :max_len]
 
-def create_mega_df(labels, features, max_len, cache_dir="cached_data", device="cpu"):
+def create_mega_df(labels, features, max_len):
     """
-    Creates combined DataFrames for features and labels with caching support.
-    
+    Creates combined DataFrames for features and labels.
+    If labels are not provided, labels DataFrame will be filled with zeros or set to None.
+
     Args:
         labels (list of Path): List of label file paths. Can be empty.
         features (list of Path): List of feature file paths.
         max_len (int): Maximum sequence length.
-        cache_dir (str): Directory to store cached files.
-        device (str): Device to use for processing ('cpu' or 'cuda')
 
     Returns:
         tuple: (mega_features, mega_labels)
+            mega_features (pd.DataFrame): Combined features.
+            mega_labels (pd.DataFrame or None): Combined labels or None if not provided.
     """
-    # Create cache directory if it doesn't exist
-    os.makedirs(cache_dir, exist_ok=True)
-    
-    # Define cache file paths
-    features_cache = os.path.join(cache_dir, f"mega_features_len{max_len}.csv")
-    labels_cache = os.path.join(cache_dir, f"mega_labels_len{max_len}.csv")
-    
-    # Check if cached files exist
-    if os.path.exists(features_cache) and (not labels or os.path.exists(labels_cache)):
-        logger.info("Loading from cached files")
-        import dask.dataframe as dd
-        
-        # Read features and convert to pandas DataFrame
-        mega_features = dd.read_csv(features_cache, 
-                                  blocksize='64MB')\
-                         .compute(scheduler='threads')  # Returns pandas DataFrame
-        
-        # Read labels if they exist and convert to pandas DataFrame
-        if labels and os.path.exists(labels_cache):
-            mega_labels = dd.read_csv(labels_cache,
-                                    blocksize='64MB')\
-                           .compute(scheduler='threads')  # Returns pandas DataFrame
-        else:
-            mega_labels = None
-            
-        logger.info("Successfully converted Dask DataFrames to pandas DataFrames")
-        return mega_features, mega_labels
-
-    logger.info("Cache not found. Creating mega DataFrame from labels and features")
+    logger.info("Creating mega DataFrame from labels and features")
     all_features = []
     all_labels = []
 
-    # Add progress bar for features processing
-    import dask.dataframe as dd
-    
-    # Process features files using dask
-    logger.info("Processing features files with dask")
-    dask_features = []
-    for i in tqdm(range(len(features)), desc="Processing features"):
+    for i in range(len(features)):
         features_path = features[i]
-        # Read with dask
-        ddf = dd.read_csv(features_path, header=None, blocksize='64MB', assume_missing=True)
-        # Convert to pandas
-        features_df = ddf.compute(scheduler='threads', assume_missing=True)
-        
-        if len(features_df.columns) < max_len:
-            features_df = pad_data_frame(features_df, max_len) 
+        features_df = pd.read_csv(features_path, header=None)
+
+        if len(features_df) < max_len:
+            features_df = pad_data_frame(features_df, max_len)
         else:
             features_df = truncate_data_frame(features_df, max_len)
-            
+
         all_features.append(features_df)
+        logger.debug(f"Processed features file {i+1}/{len(features)}: Features shape {features_df.shape}")
 
         if labels:
             if i < len(labels):
                 labels_path = labels[i]
-                # Read labels with dask
-                ddf_labels = dd.read_csv(labels_path, header=None, blocksize='64MB', assume_missing=True)
-                # Convert to pandas
-                labels_df = ddf_labels.compute(scheduler='threads', assume_missing=True)
+                labels_df = pd.read_csv(labels_path, header=None)
 
-                if len(labels_df.columns) < max_len:
+                if len(labels_df) < max_len:
                     labels_df = pad_data_frame(labels_df, max_len)
                 else:
                     labels_df = truncate_data_frame(labels_df, max_len)
 
                 all_labels.append(labels_df)
+                logger.debug(f"Processed labels file {i+1}/{len(labels)}: Labels shape {labels_df.shape}")
             else:
                 logger.warning(f"No corresponding label file for features file {i+1}. Filling with zeros.")
                 dummy_labels = pd.DataFrame(0, index=range(max_len), columns=[0])
                 all_labels.append(dummy_labels)
         else:
-            logger.info(f"No labels provided for features file {i+1}. Filling labels with zeros.")
+            logger.debug(f"No labels provided for features file {i+1}. Filling labels with zeros.")
             dummy_labels = pd.DataFrame(0, index=range(max_len), columns=[0])
             all_labels.append(dummy_labels)
 
     if all_features:
-        logger.info("Concatenating features...")
         mega_features = pd.concat(all_features, axis=0).reset_index(drop=True)
         logger.info(f"Mega Features shape: {mega_features.shape}")
-        
-        logger.info("Saving features cache...")
-        mega_features.to_csv(features_cache, index=False)
-        logger.info(f"Cached features saved to {features_cache}")
     else:
         mega_features = pd.DataFrame()
         logger.warning("No features provided. Mega Features is empty.")
 
     if labels:
-        logger.info("Concatenating labels...")
         mega_labels = pd.concat(all_labels, axis=0).reset_index(drop=True)
         logger.info(f"Mega Labels shape: {mega_labels.shape}")
-        
-        logger.info("Saving labels cache...")
-        mega_labels.to_csv(labels_cache, index=False)
-        logger.info(f"Cached labels saved to {labels_cache}")
     else:
         mega_labels = None
         logger.info("No labels provided. Mega Labels is set to None.")
@@ -206,7 +159,6 @@ def sample_and_scale(final_features, mega_labels, sample_size=1000):
     else:
         logger.info(f"Sampled Features shape: {sampled_features.shape}")
         logger.info("Sampled Labels: None")
-        sampled_labels = None
 
     return sampled_features, sampled_labels
 

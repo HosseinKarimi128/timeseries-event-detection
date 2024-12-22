@@ -23,13 +23,12 @@ import torch
 import os
 from matplotlib import pyplot as plt
 
-
 def train_model_gradio(
     labels_paths=['data/Gaussian_Cp_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
     features_paths=['data/time_series_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
     sample_size=800000,
     epochs=30,
-    batch_size=256,
+    batch_size=32,
     learning_rate=0.001,
     output_dir='results',
     model_type='lstm'
@@ -39,20 +38,15 @@ def train_model_gradio(
     logger = logging.getLogger(__name__)
     logger.info("Starting training via Gradio interface")
 
-    # if torch.cuda.is_available():
-    #     current_device = torch.cuda.current_device()
-    #     logger.info(f"Using CUDA Device {current_device}: {torch.cuda.get_device_name(current_device)}")
-
     labels_paths = [Path(path) for path in labels_paths]
     features_paths = [Path(path) for path in features_paths]
-    max_len = 300  # Adjust based on your data
+    max_len = 267  # Adjust based on your data
 
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-    device = torch.device("cuda:1")
-    logger.info(f"Using device: {device}")
+
     # Data Processing for Training
-    mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len, cache_dir="cached_data", device=device)
+    mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
     final_features = add_delta_t_features(mega_features)
     sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
     sampled_features = remove_nan_from_features(sampled_features, max_len)
@@ -123,7 +117,7 @@ def predict_model_gradio(
 
     labels_paths = [Path(path) for path in labels_paths] if labels_paths else []
     features_paths = [Path(path) for path in features_paths]
-    max_len = 300  # Adjust based on your data
+    max_len = 267  # Adjust based on your data
 
     # Create output directory if it doesn't exist
     output_dir = Path(predictions_csv).parent
@@ -154,8 +148,7 @@ def predict_model_gradio(
         #     sampled_original_features, sampled_labels = just_scale(final_features, mega_labels)
     if input_indices is not None:
         final_features = final_features[input_indices[0]:input_indices[1]]
-        if mega_labels is not None:
-            mega_labels = mega_labels[input_indices[0]:input_indices[1]]
+        mega_labels = mega_labels[input_indices[0]:input_indices[1]]
     sampled_original_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
 
     sampled_features = remove_nan_from_features(sampled_original_features, max_len)
