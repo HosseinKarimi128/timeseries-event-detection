@@ -206,6 +206,7 @@ def sample_and_scale(final_features, mega_labels, sample_size=1000):
     else:
         logger.info(f"Sampled Features shape: {sampled_features.shape}")
         logger.info("Sampled Labels: None")
+        sampled_labels = None
 
     return sampled_features, sampled_labels
 
