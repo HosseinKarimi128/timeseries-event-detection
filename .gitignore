@@ -169,3 +169,4 @@ data/
 # Ignore specific Python files
 combined.py
 _integ.py
+lab.ipynb

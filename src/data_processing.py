@@ -12,217 +12,79 @@ from tqdm import tqdm
 tqdm.pandas()
 logger = logging.getLogger(__name__)
 
-def pad_data_frame(df, max_len):
-    logger.debug(f"Padding DataFrame to max length {max_len}")
-    return df.reindex(columns=range(max_len), fill_value=0)
 
-def truncate_data_frame(df, max_len):
-    logger.debug(f"Truncating DataFrame to max length {max_len}")
-    return df.iloc[:, :max_len]
+def cumulate_ones(_series):
+    _series = pd.Series(_series)
+    _output = _series.groupby((_series == 0).cumsum()).cumsum() * _series
+    return _output
 
-def create_mega_df(labels, features, max_len):
-    """
-    Creates combined DataFrames for features and labels.
-    If labels are not provided, labels DataFrame will be filled with zeros or set to None.
+def create_delta_t(_series):
+    _series = pd.Series(_series)
+    _output = _series.copy()
+    _output.iloc[:-1] = _output.iloc[:-1].values - _output.iloc[1:].values
+    _output.iloc[:-1] = _output.iloc[:-1].clip(lower=0)
+    _output.iloc[-1] = 0
+    return _output
 
-    Args:
-        labels (list of Path): List of label file paths. Can be empty.
-        features (list of Path): List of feature file paths.
-        max_len (int): Maximum sequence length.
+def cumulate_ones_and_create_delta_t(_series):
+    return create_delta_t(cumulate_ones(_series))
 
-    Returns:
-        tuple: (mega_features, mega_labels)
-            mega_features (pd.DataFrame): Combined features.
-            mega_labels (pd.DataFrame or None): Combined labels or None if not provided.
-    """
-    logger.info("Creating mega DataFrame from labels and features")
-    all_features = []
-    all_labels = []
+def create_delta_t_df(_paths):
+    for _path in _paths:
+        file_name = str(_path).split('/')[-1]
+        delta_t_file_path = os.path.join('data', 'delta_t_' + file_name)
+        if os.path.exists(delta_t_file_path):
+            logger.info(f"{delta_t_file_path} already exists")
+            continue
+        _df = pd.read_csv(_path, header=None)
+        mask = _df.isna().astype(int)
+        delta_t_df = mask.progress_apply(cumulate_ones_and_create_delta_t, axis=1)
+        delta_t_df.to_csv(delta_t_file_path, index=False, header=False)
+        logger.info(f"Created delta_t_{_path}")
 
-    for i in range(len(features)):
-        features_path = features[i]
-        features_df = pd.read_csv(features_path, header=None)
-
-        if len(features_df) < max_len:
-            features_df = pad_data_frame(features_df, max_len)
+def create_features_tensor(_paths, max_len):
+    _features = []
+    for _path in _paths:
+        file_name = str(_path).split('/')[-1]
+        delta_t_file_path = os.path.join('data', 'delta_t_' + file_name)
+        _time_series = pd.read_csv(_path, header=None)
+        _delta_t_series = pd.read_csv(delta_t_file_path, header=None)
+        # pad or truncate to max_len
+        if len(_time_series.columns) > max_len:
+            _time_series = _time_series.iloc[:, :max_len]
+            _delta_t_series = _delta_t_series.iloc[:, :max_len]
+            _original_time_series = _time_series.copy()
         else:
-            features_df = truncate_data_frame(features_df, max_len)
+            # Fix: Use pad_width to ensure consistent array shapes
+            pad_width = max_len - len(_time_series.columns)
+            _time_series = np.pad(_time_series.values, ((0, 0), (0, pad_width)), mode='constant', constant_values=0.0)
+            _original_time_series = _time_series.copy()
+            _delta_t_series = np.pad(_delta_t_series.values, ((0, 0), (0, pad_width)), mode='constant', constant_values=0.0)
+        
+        _features.append(_time_series)
+        _features.append(_delta_t_series)
+    
+    # Stack all features into a single numpy array before converting to tensor
+    _features = np.stack(_features, axis=-1)
+    return torch.tensor(_features, dtype=torch.float32), torch.tensor(_original_time_series, dtype=torch.float32)
 
-        all_features.append(features_df)
-        logger.debug(f"Processed features file {i+1}/{len(features)}: Features shape {features_df.shape}")
-
-        if labels:
-            if i < len(labels):
-                labels_path = labels[i]
-                labels_df = pd.read_csv(labels_path, header=None)
-
-                if len(labels_df) < max_len:
-                    labels_df = pad_data_frame(labels_df, max_len)
-                else:
-                    labels_df = truncate_data_frame(labels_df, max_len)
-
-                all_labels.append(labels_df)
-                logger.debug(f"Processed labels file {i+1}/{len(labels)}: Labels shape {labels_df.shape}")
-            else:
-                logger.warning(f"No corresponding label file for features file {i+1}. Filling with zeros.")
-                dummy_labels = pd.DataFrame(0, index=range(max_len), columns=[0])
-                all_labels.append(dummy_labels)
+def create_labels_tensor(_paths, max_len):
+    _labels = []
+    for _path in _paths:
+        _df = pd.read_csv(_path, header=None)
+        # pad or truncate to max_len
+        if len(_df.columns) > max_len:
+            _df = _df.iloc[:, :max_len]
         else:
-            logger.debug(f"No labels provided for features file {i+1}. Filling labels with zeros.")
-            dummy_labels = pd.DataFrame(0, index=range(max_len), columns=[0])
-            all_labels.append(dummy_labels)
-
-    if all_features:
-        mega_features = pd.concat(all_features, axis=0).reset_index(drop=True)
-        logger.info(f"Mega Features shape: {mega_features.shape}")
-    else:
-        mega_features = pd.DataFrame()
-        logger.warning("No features provided. Mega Features is empty.")
-
-    if labels:
-        mega_labels = pd.concat(all_labels, axis=0).reset_index(drop=True)
-        logger.info(f"Mega Labels shape: {mega_labels.shape}")
-    else:
-        mega_labels = None
-        logger.info("No labels provided. Mega Labels is set to None.")
-
-    return mega_features, mega_labels
-
-def create_delta_t_feature(sequence, max_len):
-    sequence = np.nan_to_num(sequence)
-    is_zero_mask = sequence != 0
-    return count_ones_since_last_zero(is_zero_mask, max_len)
-
-def count_ones_since_last_zero(arr, max_len):
-    output = []
-    count = 1
-    for i in range(max_len):
-        if arr[i]:
-            output.append(count)
-            count = 1
-        else:
-            output.append(1)
-            count += 1
-    return np.array(output)
-
-def add_delta_t_features(mega_features):
-    logger.info("Adding delta t features")
-    max_len = mega_features.shape[1]
-    delta_t = mega_features.progress_apply(lambda x: create_delta_t_feature(x, max_len), axis=1)
-    final_features = np.dstack((mega_features.values, np.vstack(delta_t.values)))
-    logger.info(f"Final features shape after adding delta t and length: {final_features.shape}")
-    return final_features
-
-def sample_and_scale(final_features, mega_labels, sample_size=1000):
-    """
-    Samples and scales the features and labels.
-
-    Args:
-        final_features (np.ndarray): Final features array with shape (num_samples, seq_len, num_features).
-        mega_labels (pd.DataFrame or None): Mega labels DataFrame or None if labels are not provided.
-        sample_size (int): Number of samples to select.
-
-    Returns:
-        tuple: (sampled_features, sampled_labels)
-            sampled_features (torch.Tensor): Sampled and scaled features.
-            sampled_labels (torch.Tensor or None): Sampled and scaled labels or None if labels are not provided.
-    """
-    # logger.info("Sampling and scaling features and labels")
-    # num_available = len(final_features)
-    # actual_sample_size = min(sample_size, num_available)
-    # indices = np.random.choice(num_available, size=actual_sample_size, replace=False)
-    # sampled_features = final_features[indices]
-
-    # # Initialize sampled_labels as None
-    # sampled_labels = None
-
-    # if mega_labels is not None:
-    #     sampled_labels = mega_labels.values[indices]
-
-    # # # Separate features and delta_t features
-    # # features = sampled_features[:, :, 0]
-    # # delta_t = sampled_features[:, :, 1]
-
-    # # # Scale features
-    # # scaler_features = StandardScaler()
-    # # features = scaler_features.fit_transform(features)
-
-    # # # Combine scaled features with delta_t (assuming delta_t doesn't need scaling)
-    # # scaled_features = np.stack((features, delta_t), axis=-1)
-
-    sampled_features = torch.from_numpy(final_features[:sample_size]).float()
-
-    if mega_labels is not None:
-        sampled_labels = torch.from_numpy(mega_labels.values[:sample_size]).float()
-        logger.info(f"Sampled Features shape: {sampled_features.shape}")
-        logger.info(f"Sampled Labels shape: {sampled_labels.shape}")
-    else:
-        logger.info(f"Sampled Features shape: {sampled_features.shape}")
-        logger.info("Sampled Labels: None")
-
-    return sampled_features, sampled_labels
-
-def just_scale(final_features, mega_labels):
-    logger.info("Scaling features and labels")
-    features = final_features[:, :, 0]
-    delta_t = final_features[:, :, 1]
-    not_nan_features = features[~np.isnan(features)]
-    mean = np.mean(not_nan_features)
-    std = np.std(not_nan_features)
-    scaled_features = (features - mean) / (std)
-    # Combine scaled features with delta_t (assuming delta_t doesn't need scaling)
-    scaled_features = np.stack((scaled_features, delta_t), axis=-1)
-
-    sampled_features = torch.from_numpy(scaled_features).float()
-
-    if mega_labels is not None:
-        sampled_labels = torch.from_numpy(mega_labels.values).float()
-        logger.info(f"Sampled Features shape: {sampled_features.shape}")
-        logger.info(f"Sampled Labels shape: {sampled_labels.shape}")
-    else:
-        logger.info(f"Sampled Features shape: {sampled_features.shape}")
-        logger.info("Sampled Labels: None")
-
-    return sampled_features, sampled_labels
-
-def gap_removal(sampled_features, max_length=200):
-    logger.info("Removing gaps from features")
-    gap_mask = sampled_features[:, :, 0] != 0
-    output_features = []
-
-    for i in range(sampled_features.size(0)):
-        mask = gap_mask[i]
-        cleaned = sampled_features[i][mask]
-        if len(cleaned) > max_length:
-            cleaned = cleaned[:max_length]
-        else:
-            padding = torch.zeros(max_length - len(cleaned), sampled_features.size(2))
-            cleaned = torch.cat([cleaned, padding], dim=0)
-        output_features.append(cleaned)
-
-    output_features = torch.stack(output_features)
-    logger.info(f"Output Features shape after gap removal: {output_features.shape}")
-    return output_features
-
-def remove_nan_from_features(sampled_features, max_length=200):
-    logger.info("Removing NaNs from features")
-    non_nan_mask = ~torch.isnan(sampled_features[:, :, 0])
-    output_features = []
-
-    for i in range(sampled_features.size(0)):
-        mask = non_nan_mask[i]
-        cleaned = sampled_features[i][mask]
-        if len(cleaned) > max_length:
-            cleaned = cleaned[:max_length]
-        else:
-            padding = torch.zeros(max_length - len(cleaned), sampled_features.size(2))
-            cleaned = torch.cat([cleaned, padding], dim=0)
-        output_features.append(cleaned)
-
-    output_features = torch.stack(output_features)
-    logger.info(f"Output Features shape after NaN removal: {output_features.shape}")
-    return output_features
-
+            # Use same padding approach as features tensor
+            pad_width = max_len - len(_df.columns)
+            _df = np.pad(_df.values, ((0, 0), (0, pad_width)), mode='constant', constant_values=0.0)
+        _labels.append(_df)
+    
+    # Stack labels into single numpy array before converting to tensor
+    _labels = np.stack(_labels, axis=-1)
+    _labels = _labels.reshape(len(_labels), -1)
+    return torch.tensor(_labels, dtype=torch.float32)
 # Custom Datasets
 
 def calculate_non_zero_length(features):

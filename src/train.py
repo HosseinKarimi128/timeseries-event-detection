@@ -9,7 +9,7 @@ from torchinfo import summary
 
 import os
 
-os.environ['CUDA_LAUNCH_BLOCKING']="1"
+# os.environ['CUDA_LAUNCH_BLOCKING']="1"
 os.environ['TORCH_USE_CUDA_DSA'] = "1"
 
 logger = logging.getLogger(__name__)
@@ -27,10 +27,10 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
         sample_input = (train_dataset[0:32]['input_ids'])
         config = AttentionConfig(
                     input_size=2,
-                    lstm_hidden_size=128,
+                    lstm_hidden_size=256,
                     lstm_num_layers=1,
                     lstm_dropout=0.5,
-                    attention_dim=128,
+                    attention_dim=512,
                     bidirectional=True,
                     output_dim=1,
                     dropout=0.5

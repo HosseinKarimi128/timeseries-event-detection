@@ -16,184 +16,62 @@ def trim_labels(labels):
 
 
 # =========================================================================================================
-# LSTM Model
+# CNN Model
 # =========================================================================================================
-# class BiTGLSTMConfig(PretrainedConfig):
-#     model_type = "lstm"
 
-#     def __init__(self, hidden_size=32, num_layers=2, max_len=150, dropout=0.5, **kwargs):
-#         super().__init__(**kwargs)
-#         self.hidden_size = hidden_size
-#         self.num_layers = num_layers
-#         self.max_len = max_len
-#         self.dropout = dropout
-#         logger.debug(f"LSTMConfig initialized with hidden_size={hidden_size}, num_layers={num_layers}, max_len={max_len}, dropout={dropout}")
+class CNNConfig(PretrainedConfig):
+    model_type = "cnn"
 
-# class BiTGLSTMModel(PreTrainedModel):
-#     def __init__(self, config, verbose=False):
-#         super().__init__(config)
-#         self.model = TimeGatedLSTM(
-#             input_size=1,
-#             hidden_size=config.hidden_size,
-#             num_layers=config.num_layers
-#         )
-#         self.max_len = config.max_len
-#         self.output_layer = nn.Linear(config.hidden_size, 1)
-#         if verbose:
-#             logger.info("LSTMModel initialized")
+    def __init__(self, seq_length=300, num_features=2, **kwargs):
+        super().__init__(**kwargs)
+        self.seq_length = seq_length
+        self.num_features = num_features
+        logger.debug(f"CNNConfig initialized with seq_length={seq_length}, num_features={num_features}")
 
-#     def forward(self, input_ids, lengths=None, labels=None):
-#         """
-#         input_ids: [batch_size, seq_len, 2], where the last dimension contains [x, delta_t]
-#         lengths: [batch_size], lengths of each sequence before padding
-#         labels: [batch_size, seq_len]
-#         """
-#         # Separate x and delta_t
-#         x = input_ids[:, :, 0].unsqueeze(-1)  # [batch_size, seq_len, 1]
-#         delta_t = input_ids[:, :, 1].unsqueeze(-1)  # [batch_size, seq_len, 1]
-#         if lengths is None:
-#             lengths = torch.sum(input_ids != 0, dim=-2)[:, 0]
-#         # Pack sequences
-#         x_packed = nn.utils.rnn.pack_padded_sequence(x, lengths.cpu(), batch_first=True, enforce_sorted=False)
-#         delta_t_packed = nn.utils.rnn.pack_padded_sequence(delta_t, lengths.cpu(), batch_first=True, enforce_sorted=False)
+class CNNModel(PreTrainedModel):
+    def __init__(self, config, verbose=False):
+        super().__init__(config)
+        self.model = CNN1D(config.seq_length, config.num_features)
+        self.sigmoid = nn.Sigmoid()
+        if verbose:
+            logger.info("CNNModel initialized")
 
-#         # Pass through the model
-#         output_packed = self.model(x_packed, delta_t_packed)
+    def forward(self, input_ids, labels=None):
+        x = self.model(input_ids)
+        logits = self.sigmoid(x)
+        loss = None
+        if labels is not None:
+            loss_fct = nn.BCELoss()
+            loss = loss_fct(logits, labels)
+        return {'loss': loss, 'logits': logits}
 
-#         # Unpack the output
-#         output, _ = nn.utils.rnn.pad_packed_sequence(output_packed, batch_first=True, total_length=self.max_len)
+class CNN1D(nn.Module):
+    def __init__(self, seq_length, num_features=2):
+        super(CNN1D, self).__init__()
+        self.seq_length = seq_length
+        self.num_features = num_features
+        self.avg_pool = nn.AvgPool1d(kernel_size=30, stride=1, padding=14)
+        self.oddity = int(seq_length % 2 == 0)
+        self.conv = nn.Conv1d(in_channels=num_features, out_channels=32, kernel_size=(seq_length // 2) + self.oddity)
+        self.max_pool = nn.MaxPool1d(kernel_size=2, stride=2)
+        self.fc = nn.Linear(((seq_length // 2) - self.oddity) * 32, seq_length)
+        self.relu = nn.ReLU()
+        self.bn = nn.BatchNorm1d(32)
+        self.dropout = nn.Dropout(0.5)
+        self.tanh = nn.Tanh()
+        logger.debug(f"CNN1D initialized with seq_length={seq_length}, num_features={num_features}")
 
-#         # Apply output layer
-#         logits = self.output_layer(output).squeeze(-1)  # [batch_size, seq_len]
-
-#         # Since sequences are padded, we need to mask the logits and labels
-#         if labels is not None:
-#             # Create a mask based on lengths
-#             lengths = lengths.to('cuda')
-#             mask = torch.arange(labels.size(1)).unsqueeze(0).to(labels.device) < lengths.unsqueeze(1)
-#             mask = mask.float()  # Convert to float for multiplication
-
-#             # Compute loss only over valid time steps
-#             loss_fct = nn.BCEWithLogitsLoss()
-#             loss = loss_fct(logits, labels)
-#             loss = (loss * mask).sum() / mask.sum()  # Average loss over all valid time steps
-#         else:
-#             loss = None
-
-#         return {'loss': loss, 'logits': torch.sigmoid(logits)}
-
-
-# class TimeGatedLSTMCell(nn.Module):
-#     def __init__(self, input_size, hidden_size):
-#         super(TimeGatedLSTMCell, self).__init__()
-#         self.hidden_size = hidden_size
-
-#         # Combined weight matrices and biases
-#         self.weight_ih = nn.Linear(input_size, 4 * hidden_size)
-#         self.weight_hh = nn.Linear(hidden_size, 4 * hidden_size)
-
-#         # Time-gating mechanism
-#         self.time_gate = nn.Linear(1, hidden_size)
-
-#     def forward(self, x_packed, delta_t_packed, hx):
-#         h_t, c_t = hx  # Initial hidden and cell states
-
-#         # x_packed is a PackedSequence
-#         x_data, batch_sizes = x_packed.data, x_packed.batch_sizes
-#         delta_t_data = delta_t_packed.data
-
-#         # Prepare lists to hold outputs
-#         outputs = []
-#         h_t_list = []
-#         c_t_list = []
-
-#         # Process the packed data step by step
-#         current_batch_size = batch_sizes[0]
-#         start = 0
-#         for batch_size in batch_sizes:
-#             end = start + batch_size
-
-#             x = x_data[start:end]  # Input at current time step
-#             dt = delta_t_data[start:end]  # Delta_t at current time step
-
-#             # Update h_t and c_t for the reduced batch size
-#             if current_batch_size > batch_size:
-#                 # Remove entries corresponding to finished sequences
-#                 h_t = h_t[:batch_size]
-#                 c_t = c_t[:batch_size]
-#             elif current_batch_size < batch_size:
-#                 # Add entries for new sequences
-#                 extra_h = x.new_zeros(batch_size - current_batch_size, self.hidden_size)
-#                 extra_c = x.new_zeros(batch_size - current_batch_size, self.hidden_size)
-#                 h_t = torch.cat([h_t, extra_h], dim=0)
-#                 c_t = torch.cat([c_t, extra_c], dim=0)
-
-#             current_batch_size = batch_size
-
-#             gates = self.weight_ih(x) + self.weight_hh(h_t)
-
-#             i_gate, f_gate, g_gate, o_gate = gates.chunk(4, dim=1)
-#             i_gate = torch.sigmoid(i_gate)
-#             f_gate = torch.sigmoid(f_gate)
-#             g_gate = torch.tanh(g_gate)
-#             o_gate = torch.sigmoid(o_gate)
-#             t_gate = torch.sigmoid(self.time_gate(dt))
-
-#             # Update cell state and hidden state
-#             c_t = f_gate * c_t + i_gate * g_gate * t_gate
-#             h_t = o_gate * torch.tanh(c_t)
-
-#             outputs.append(h_t)
-#             h_t_list.append(h_t)
-#             c_t_list.append(c_t)
-
-#             start = end
-
-#         # Concatenate all outputs
-#         outputs = torch.cat(outputs, dim=0)
-#         output_packed = nn.utils.rnn.PackedSequence(outputs, batch_sizes)
-
-#         # Final hidden and cell states
-#         h_t_final = h_t_list[-1]
-#         c_t_final = c_t_list[-1]
-
-#         return output_packed, (h_t_final, c_t_final)
-
-
-# class TimeGatedLSTM(nn.Module):
-#     def __init__(self, input_size, hidden_size, num_layers):
-#         super(TimeGatedLSTM, self).__init__()
-#         self.num_layers = num_layers
-#         self.layers = nn.ModuleList([
-#             TimeGatedLSTMCell(input_size if i == 0 else hidden_size, hidden_size)
-#             for i in range(num_layers)
-#         ])
-
-#     def forward(self, x_packed, delta_t_packed, h0=None, c0=None):
-#         """
-#         x_packed: PackedSequence containing input data
-#         delta_t_packed: PackedSequence containing delta_t data
-#         h0, c0: Optional initial hidden and cell states
-#         """
-#         batch_size = x_packed.batch_sizes[0]
-
-#         # Initialize hidden and cell states if not provided
-#         if h0 is None:
-#             h = [x_packed.data.new_zeros(batch_size, self.layers[0].hidden_size) for _ in range(self.num_layers)]
-#         else:
-#             h = [h0_layer for h0_layer in h0]
-
-#         if c0 is None:
-#             c = [x_packed.data.new_zeros(batch_size, self.layers[0].hidden_size) for _ in range(self.num_layers)]
-#         else:
-#             c = [c0_layer for c0_layer in c0]
-
-#         output = x_packed
-
-#         for i, layer in enumerate(self.layers):
-#             output, (h[i], c[i]) = layer(output, delta_t_packed, (h[i], c[i]))
-
-#         return output
+    def forward(self, x):
+        x = x.permute(0, 2, 1)  # Change shape to (batch_size, channels, seq_length)
+        x = self.avg_pool(x)
+        x = self.tanh(self.conv(x))
+        # x = self.max_pool(x)
+        x = self.bn(x)
+        x = x.view(x.size(0), -1)  # Flatten
+        x = self.dropout(x)
+        x = self.fc(x)
+        return x
+    
 
 class BiTGLSTMConfig(PretrainedConfig):
     model_type = "lstm"
@@ -347,64 +225,6 @@ class TimeGatedLSTM(nn.Module):
 
             return x
 
-
-
-
-    
-# =========================================================================================================
-# CNN Model
-# =========================================================================================================
-
-class CNNConfig(PretrainedConfig):
-    model_type = "cnn"
-
-    def __init__(self, seq_length=300, num_features=2, **kwargs):
-        super().__init__(**kwargs)
-        self.seq_length = seq_length
-        self.num_features = num_features
-        logger.debug(f"CNNConfig initialized with seq_length={seq_length}, num_features={num_features}")
-
-class CNNModel(PreTrainedModel):
-    def __init__(self, config, verbose=False):
-        super().__init__(config)
-        self.model = CNN1D(config.seq_length, config.num_features)
-        self.sigmoid = nn.Sigmoid()
-        if verbose:
-            logger.info("CNNModel initialized")
-
-    def forward(self, input_ids, labels=None):
-        x = self.model(input_ids)
-        logits = self.sigmoid(x)
-        loss = None
-        if labels is not None:
-            loss_fct = nn.BCELoss()
-            loss = loss_fct(logits, labels)
-        return {'loss': loss, 'logits': logits}
-
-class CNN1D(nn.Module):
-    def __init__(self, seq_length, num_features=2):
-        super(CNN1D, self).__init__()
-        self.seq_length = seq_length
-        self.num_features = num_features
-        self.avg_pool = nn.AvgPool1d(kernel_size=30, stride=1, padding=14)
-        self.conv = nn.Conv1d(in_channels=num_features, out_channels=32, kernel_size=(seq_length // 2) + 1)
-        self.fc = nn.Linear(((seq_length // 2)) * 32, seq_length)
-        self.relu = nn.ReLU()
-        self.bn = nn.BatchNorm1d(32)
-        self.dropout = nn.Dropout(0.5)
-        self.tanh = nn.Tanh()
-        logger.debug(f"CNN1D initialized with seq_length={seq_length}, num_features={num_features}")
-
-    def forward(self, x):
-        x = x.permute(0, 2, 1)  # Change shape to (batch_size, channels, seq_length)
-        x = self.avg_pool(x)
-        x = self.tanh(self.conv(x))
-        x = self.bn(x)
-        x = x.view(x.size(0), -1)  # Flatten
-        x = self.dropout(x)
-        x = self.fc(x)
-        return x
-    
 
 # =========================================================================================================
 # Attention Model

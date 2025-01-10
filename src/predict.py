@@ -146,7 +146,7 @@ def plot_model_output(model, original_features, features, labels=None, sample_in
     # Assuming original_features is a tensor with shape [num_samples, max_len, num_features]
     feature_plot = original_features[sample_index].cpu().numpy()
 
-    ax.plot(range(len(feature_plot)), feature_plot[:, 0], color='r', alpha=0.5, label='Displacements')
+    ax.plot(range(len(feature_plot)), feature_plot, color='r', alpha=0.5, label='Displacements')
     ax.set_xlabel('Time Steps')
     ax.set_ylabel('Displacement Values', color='r')
     ax.tick_params(axis='y', labelcolor='r')

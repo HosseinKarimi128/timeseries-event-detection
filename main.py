@@ -4,14 +4,11 @@ import logging
 from src.compute_metrics import compute_metrics
 from src.utils import setup_logging
 from src.data_processing import (
-    create_mega_df,
-    add_delta_t_features,
-    gap_removal,
-    just_scale,
-    remove_nan_from_features,
-    sample_and_scale,
+    create_delta_t_df,
+    create_features_tensor,
+    create_labels_tensor,
     CustomDataset,
-    CustomDatasetCNN
+    CustomDatasetCNN,
 )
 from src.model import trim_labels
 from src.train import train_model
@@ -40,35 +37,32 @@ def train_model_gradio(
 
     labels_paths = [Path(path) for path in labels_paths]
     features_paths = [Path(path) for path in features_paths]
-    max_len = 267  # Adjust based on your data
+    max_len = 300  # Adjust based on your data
 
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
 
     # Data Processing for Training
-    mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
-    final_features = add_delta_t_features(mega_features)
-    sampled_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
-    sampled_features = remove_nan_from_features(sampled_features, max_len)
-    # plt.scatter(range(len(mega_features.iloc[0])),mega_features.iloc[0], label='displacements', color='blue') 
-    # plt.savefig('feature.png')
-    # plt.close()
-    # fig, ax = plt.subplots()
-    # ax2 = ax.twinx()
-    # ax.scatter(range(len(sampled_features[0,:119,0])),sampled_features[0,:119,0], label='displacements', color='blue')
-    # ax.bar(range(len(sampled_features[0,:119,0])), sampled_features[0,:119,1], alpha=0.5, label='time-delta', color='green')
-    # # ax2.plot(sampled_labels[0,:119], label='label', color='cyan')
-    # ax.legend()
-    # # ax2.legend()
-    # plt.tight_layout()
-    # plt.savefig('feature_with_delta_t.png')
-    # exit()
-    # Label Trimming
-    trimmed_labels = trim_labels(sampled_labels)
-
+    logger.info("Creating delta_t_df")
+    create_delta_t_df(features_paths)
+    logger.info("Creating features_tensor")
+    features_tensor, _ = create_features_tensor(features_paths, max_len)
+    logger.info("Creating labels_tensor")
+    labels_tensor = create_labels_tensor(labels_paths, max_len)
+    print(features_tensor.shape)
+    print(labels_tensor.shape)
+    breakpoint()
+    trimmed_labels = trim_labels(labels_tensor)
+    # nan to 0
+    features_tensor = torch.nan_to_num(features_tensor, nan=0.0)
+    labels_tensor = torch.nan_to_num(labels_tensor, nan=0.0)
+    #sample dataset
+    sample_indices = random.sample(range(len(features_tensor)), k=sample_size)
+    sampled_features = features_tensor[sample_indices]
+    sampled_labels = trimmed_labels[sample_indices]
     # Train-validation split
     train_features, val_features, train_labels, val_labels = train_test_split(
-        sampled_features, trimmed_labels, test_size=0.2, random_state=42
+        sampled_features, sampled_labels, test_size=0.2, random_state=42
     )
 
     # Create datasets based on model type
@@ -117,48 +111,44 @@ def predict_model_gradio(
 
     labels_paths = [Path(path) for path in labels_paths] if labels_paths else []
     features_paths = [Path(path) for path in features_paths]
-    max_len = 267  # Adjust based on your data
+    max_len = 300  # Adjust based on your data
 
     # Create output directory if it doesn't exist
     output_dir = Path(predictions_csv).parent
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Data Processing for Prediction
-    mega_features, mega_labels = create_mega_df(labels_paths, features_paths, max_len)
-
-    # plt.close()
-    final_features = add_delta_t_features(mega_features)
-    # plt.plot(final_features[0,:,])
-    # plt.savefig('test_features_after.png')
-    # plt.close()
-    # if input_indices is not None:
-    #     if (input_indices[1] - input_indices[0]) > 2:
-    #         sampled_original_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
-    #     else:
-    #         final_features = final_features[input_indices[0]:input_indices[1]]
-    #         mega_labels = mega_labels[input_indices[0]:input_indices[1]]
-    #         sampled_original_features, sampled_labels = just_scale(final_features, mega_labels)
-    # else:
-    #     if sample_size > 2:
-        #     sampled_original_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
-        # else:
-        #     i = random.randint(0, len(final_features) - 2)
-        #     final_features = final_features[i:i+sample_size]
-        #     mega_labels = mega_labels[i:i+sample_size]
-        #     sampled_original_features, sampled_labels = just_scale(final_features, mega_labels)
-    if input_indices is not None:
-        final_features = final_features[input_indices[0]:input_indices[1]]
-        mega_labels = mega_labels[input_indices[0]:input_indices[1]]
-    sampled_original_features, sampled_labels = sample_and_scale(final_features, mega_labels, sample_size=sample_size)
-
-    sampled_features = remove_nan_from_features(sampled_original_features, max_len)
-
-    # Label Trimming (only if labels are available)
-    if sampled_labels is not None and len(sampled_labels) > 0:
-        trimmed_labels = trim_labels(sampled_labels)
+    logger.info("Creating delta_t_df")
+    create_delta_t_df(features_paths)
+    logger.info("Creating features_tensor")
+    features_tensor, original_features_tensor = create_features_tensor(features_paths, max_len)
+    logger.info("Creating labels_tensor")
+    if labels_paths:
+        labels_tensor = create_labels_tensor(labels_paths, max_len)
+        trimmed_labels = trim_labels(labels_tensor)
     else:
         trimmed_labels = None
-
+    # nan to 0
+    features_tensor = torch.nan_to_num(features_tensor, nan=0.0)
+    if labels_tensor is not None:
+        labels_tensor = torch.nan_to_num(labels_tensor, nan=0.0)
+    #sample dataset
+    if not input_indices:
+        sample_indices = random.sample(range(len(features_tensor)), k=sample_size)
+        sampled_features = features_tensor[sample_indices]
+        sampled_original_features = original_features_tensor[sample_indices]
+    else:
+        sampled_features = features_tensor[input_indices[0]:input_indices[1]]
+        sampled_original_features = original_features_tensor[input_indices[0]:input_indices[1]]
+    if labels_tensor is not None:
+        if not input_indices:
+            sampled_labels = trimmed_labels[sample_indices]
+        else:
+            sampled_labels = trimmed_labels[input_indices[0]:input_indices[1]]
+    else:
+        sampled_labels = None
+    
+    # zero to nan
+    # sampled_original_features = original_features_tensor.clone()
+    # sampled_original_features[sampled_original_features == 0.0] = float('nan')
     # Load configuration based on model type
     from src.model import BiTGLSTMConfig, CNNConfig, AttentionConfig
 
