@@ -104,7 +104,7 @@ def predict_model_gradio(
     num_plot_samples,
     model_type,
     input_indices=None,
-):
+    ):
     setup_logging()
     logger = logging.getLogger(__name__)
     logger.info("Starting prediction via Gradio interface")
