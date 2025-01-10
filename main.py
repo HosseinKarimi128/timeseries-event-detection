@@ -121,6 +121,7 @@ def predict_model_gradio(
     logger.info("Creating features_tensor")
     features_tensor, original_features_tensor = create_features_tensor(features_paths, max_len)
     logger.info("Creating labels_tensor")
+    labels_tensor = None
     if labels_paths:
         labels_tensor = create_labels_tensor(labels_paths, max_len)
         trimmed_labels = trim_labels(labels_tensor)
