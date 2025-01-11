@@ -89,7 +89,7 @@ def save_predictions_to_csv(original_features, predictions, labels=None, save_pa
     data = {
         'Sample_Index': [],
         'Time_Step': [],
-        'actual_value': [],
+        'Displacements': [],
         'Prediction': []
     }
 
@@ -100,7 +100,7 @@ def save_predictions_to_csv(original_features, predictions, labels=None, save_pa
         for time_step in range(max_len):
             data['Sample_Index'].append(sample_idx)
             data['Time_Step'].append(time_step)
-            data['actual_value'].append(float(original_features[sample_idx, time_step].item()))
+            data['Displacements'].append(float(original_features[sample_idx, time_step].item()))
             data['Prediction'].append(predictions[sample_idx, time_step])
             if labels_np is not None:
                 data['Ground_Truth'].append(labels_np[sample_idx, time_step])
