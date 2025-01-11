@@ -27,6 +27,6 @@ for i, path in enumerate(data_paths):
             plot_save_path='plots',
             save_plots=True,
             num_plot_samples=0,
-            model_type='cnn',
-            input_indices=(1,-1)s
+            model_type=mt,
+            input_indices=(1,-1)
         )
