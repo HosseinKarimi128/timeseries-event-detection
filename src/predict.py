@@ -49,7 +49,7 @@ def make_predictions(model, features, batch_size=32):
 
     device = next(model.parameters()).device
     model.to(device)
-    logger.debug(f"Model is on device: {device}")
+    logger.critical(f"Model is on device: {device}")
 
     for batch in tqdm(dataloader, desc="Predicting"):
         # Ensure batch is on the same device as the model
