@@ -65,7 +65,7 @@ def make_predictions(model, features, batch_size=32):
             outputs = model(batch)
         
         # Assuming 'logits' is the key for output scores
-        logits = outputs.get('logits') or outputs[0]  # Adjust based on your model's output structure
+        logits = outputs['logits']
         
         # Move logits to CPU and convert to NumPy
         probabilities = logits.cpu().numpy()
