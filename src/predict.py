@@ -44,22 +44,34 @@ def make_predictions(model, features, batch_size=32):
         np.ndarray: Array of predictions with shape (num_samples, max_len).
     """
     logger.info("Starting prediction process")
+    
+    # Create DataLoader
     dataloader = DataLoader(features, batch_size=batch_size, shuffle=False)
     all_predictions = []
 
-    device = next(model.parameters()).device
+    # Set device to GPU if available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.critical(f"Using device: {device}")
+
+    # Move model to the selected device
     model.to(device)
-    logger.critical(f"Model is on device: {device}")
+    model.eval()  # Set model to evaluation mode
 
     for batch in tqdm(dataloader, desc="Predicting"):
-        # Ensure batch is on the same device as the model
+        # Move batch to the same device as the model
         batch = batch.to(device)
+        
         with torch.no_grad():
             outputs = model(batch)
-        logits = outputs['logits']
-        probabilities = logits.cpu().numpy()  # Move to CPU for aggregation
+        
+        # Assuming 'logits' is the key for output scores
+        logits = outputs.get('logits') or outputs[0]  # Adjust based on your model's output structure
+        
+        # Move logits to CPU and convert to NumPy
+        probabilities = logits.cpu().numpy()
         all_predictions.append(probabilities)
     
+    # Concatenate all predictions
     predictions = np.vstack(all_predictions)
     logger.info(f"Predictions generated with shape: {predictions.shape}")
     return predictions
