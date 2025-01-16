@@ -66,6 +66,7 @@ def create_features_tensor(_paths, max_len):
     
     # Stack all features into a single numpy array before converting to tensor
     _features = np.stack(_features, axis=-1)
+    print(_features.shape, '='*10)
     return torch.tensor(_features, dtype=torch.float32), torch.tensor(_original_time_series, dtype=torch.float32)
 
 def create_labels_tensor(_paths, max_len):
