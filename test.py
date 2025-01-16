@@ -12,7 +12,7 @@ import os
 #     features_paths=features_files
 # )
 
-data_paths = glob('data/Up-Down/processed/EGMS_L3_*.csv', recursive=True)
+data_paths = glob('data/zeenvlxysg5fit4y/processed/*.csv', recursive=True)
 for i, path in enumerate(data_paths):
     model_types = ['lstm', 'cnn', 'attention']
     file_name = str(data_paths[i]).split('/')[-1]
