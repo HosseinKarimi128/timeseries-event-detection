@@ -48,7 +48,6 @@ def create_features_tensor(_paths, max_len):
         file_name = str(_path).split('/')[-1]
         delta_t_file_path = os.path.join('data', 'delta_t_' + file_name)
         _time_series = pd.read_csv(_path, header=None)
-        print(_time_series.shape)
         _delta_t_series = pd.read_csv(delta_t_file_path, header=None)
         # pad or truncate to max_len
         if len(_time_series.columns) > max_len:
@@ -67,8 +66,7 @@ def create_features_tensor(_paths, max_len):
     
     # Stack all features into a single numpy array before converting to tensor
     _features = np.stack(_features, axis=-1)
-    print('_features.shape', _features.shape)
-    print('_original_time_series', _original_time_series.shape)
+    _original_time_series = _original_time_series.values
     return torch.tensor(_features, dtype=torch.float32), torch.tensor(_original_time_series, dtype=torch.float32)
 
 def create_labels_tensor(_paths, max_len):
