@@ -44,29 +44,31 @@ def create_delta_t_df(_paths):
 
 def create_features_tensor(_paths, max_len):
     _features = []
-    _original_series_list = []
     for _path in _paths:
         file_name = str(_path).split('/')[-1]
         delta_t_file_path = os.path.join('data', 'delta_t_' + file_name)
         _time_series = pd.read_csv(_path, header=None)
         _delta_t_series = pd.read_csv(delta_t_file_path, header=None)
-        
+        # pad or truncate to max_len
         if len(_time_series.columns) > max_len:
             _time_series = _time_series.iloc[:, :max_len]
             _delta_t_series = _delta_t_series.iloc[:, :max_len]
+            _original_time_series = _time_series.copy()
         else:
+            # Fix: Use pad_width to ensure consistent array shapes
             pad_width = max_len - len(_time_series.columns)
             _time_series = np.pad(_time_series.values, ((0, 0), (0, pad_width)), mode='constant', constant_values=0.0)
+            _original_time_series = _time_series.copy()
             _delta_t_series = np.pad(_delta_t_series.values, ((0, 0), (0, pad_width)), mode='constant', constant_values=0.0)
         
-        _original_series_list.append(_time_series)  # Keep original series consistent with features
-        _features.append(np.stack((_time_series, _delta_t_series), axis=-1))  # Stack along last axis
+        _features.append(_time_series)
+        _features.append(_delta_t_series)
     
-    # Stack all features into a single numpy array
-    _features = np.concatenate(_features, axis=0)  # Ensure all are stacked correctly
-    _original_series = np.stack(_original_series_list, axis=0)  # Align shapes for the original series
-    
-    return torch.tensor(_features, dtype=torch.float32), torch.tensor(_original_series, dtype=torch.float32)
+    # Stack all features into a single numpy array before converting to tensor
+    _features = np.stack(_features, axis=-1)
+    print('_features.shape', _features.shape)
+    print('_original_time_series', _original_time_series.shape)
+    return torch.tensor(_features, dtype=torch.float32), torch.tensor(_original_time_series, dtype=torch.float32)
 
 def create_labels_tensor(_paths, max_len):
     _labels = []
