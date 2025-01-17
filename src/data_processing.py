@@ -48,6 +48,7 @@ def create_features_tensor(_paths, max_len):
         file_name = str(_path).split('/')[-1]
         delta_t_file_path = os.path.join('data', 'delta_t_' + file_name)
         _time_series = pd.read_csv(_path, header=None)
+        print(_time_series.shape)
         _delta_t_series = pd.read_csv(delta_t_file_path, header=None)
         # pad or truncate to max_len
         if len(_time_series.columns) > max_len:
