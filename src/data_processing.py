@@ -68,7 +68,7 @@ def create_features_tensor(_paths, max_len):
     _features = np.stack(_features, axis=-1)
     print('_features.shape', _features.shape)
     print('_original_time_series', _original_time_series.shape)
-    # return torch.tensor(_features, dtype=torch.float32), torch.tensor(_original_time_series, dtype=torch.float32)
+    return torch.tensor(_features, dtype=torch.float32), torch.tensor(_original_time_series, dtype=torch.float32)
 
 def create_labels_tensor(_paths, max_len):
     _labels = []
