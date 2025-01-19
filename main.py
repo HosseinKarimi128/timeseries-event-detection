@@ -23,8 +23,8 @@ from matplotlib import pyplot as plt
 def train_model_gradio(
     labels_paths=['data/Gaussian_Cp_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
     features_paths=['data/time_series_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
-    sample_size=800000,
-    epochs=30,
+    sample_size=200000,
+    epochs=100,
     batch_size=32,
     learning_rate=0.001,
     output_dir='results',
