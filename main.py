@@ -51,7 +51,6 @@ def train_model_gradio(
     labels_tensor = create_labels_tensor(labels_paths, max_len)
     print(features_tensor.shape)
     print(labels_tensor.shape)
-    breakpoint()
     trimmed_labels = trim_labels(labels_tensor)
     # nan to 0
     features_tensor = torch.nan_to_num(features_tensor, nan=0.0)
