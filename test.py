@@ -4,10 +4,13 @@ import pandas as pd
 import os
 # More specific pattern matching
 
-
-
 features_files = 'data/time_series_EGMS_L3_E28N51_100km_E_2018_2022_1.csv'
 labels_files = 'data/Gaussian_Cp_EGMS_L3_E28N51_100km_E_2018_2022_1.csv'
+
+features_files = glob(features_files)
+labels_files = glob(labels_files)
+
+
 
 train_model_gradio(
     model_type='lstm',
