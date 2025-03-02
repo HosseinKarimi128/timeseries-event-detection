@@ -48,8 +48,7 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         num_train_epochs=epochs,
-        save_steps=10000,
-        save_total_limit=2,
+        save_steps=1000,
         logging_dir='logs/',
         logging_steps=100,
         report_to=["tensorboard"]

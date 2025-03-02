@@ -51,8 +51,8 @@ def create_features_tensor(_paths, max_len):
         _delta_t_series = pd.read_csv(delta_t_file_path, header=None)
         # pad or truncate to max_len
         if len(_time_series.columns) > max_len:
-            _time_series = _time_series.iloc[:, :max_len]
-            _delta_t_series = _delta_t_series.iloc[:, :max_len]
+            _time_series = _time_series.iloc[:, :max_len].values
+            _delta_t_series = _delta_t_series.iloc[:, :max_len].values
             _original_time_series = _time_series.copy()
         else:
             # Fix: Use pad_width to ensure consistent array shapes
@@ -60,12 +60,12 @@ def create_features_tensor(_paths, max_len):
             _time_series = np.pad(_time_series.values, ((0, 0), (0, pad_width)), mode='constant', constant_values=0.0)
             _original_time_series = _time_series.copy()
             _delta_t_series = np.pad(_delta_t_series.values, ((0, 0), (0, pad_width)), mode='constant', constant_values=0.0)
-        
         _features.append(_time_series)
         _features.append(_delta_t_series)
     
     # Stack all features into a single numpy array before converting to tensor
     _features = np.stack(_features, axis=-1)
+    
     # _original_time_series = _original_time_series.values
     return torch.tensor(_features, dtype=torch.float32), torch.tensor(_original_time_series, dtype=torch.float32)
 

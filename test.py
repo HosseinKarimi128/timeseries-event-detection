@@ -4,35 +4,58 @@ import pandas as pd
 import os
 # More specific pattern matching
 
-features_files = 'data/time_series_EGMS_L3_E28N51_100km_E_2018_2022_1.csv'
-labels_files = 'data/Gaussian_Cp_EGMS_L3_E28N51_100km_E_2018_2022_1.csv'
+# features_files = 'data/sampled_data.csv'
+# labels_files = 'data/sampled_labels.csv'
 
-features_files = glob(features_files)
-labels_files = glob(labels_files)
+# features_files = glob(features_files)
+# labels_files = glob(labels_files)
 
 
 
-train_model_gradio(
-    model_type='lstm',
-    labels_paths=labels_files,
-    features_paths=features_files
-)
+# train_model_gradio(
+#     model_type='attention',
+#     output_dir='results/attention_model',
+#     labels_paths=labels_files,
+#     epochs=100,
+#     features_paths=features_files)
 
-# data_paths = glob('data/zeenvlxysg5fit4y/processed/*.csv', recursive=True)
+# model_path = 'results/lstm_model'  # Specify the model path
+# predictions_csv = 'results/lstm_model/predictions.csv'  # Specify the path for saving predictions
+# plot_save_path = 'plots'  # Specify the path for saving plots
+# save_plots = True  # Set to True to save plots
+# num_plot_samples = 10  # Specify the number of samples to plot
+
+# predict_model_gradio(
+#     model_path=model_path,
+#     labels_paths=labels_files,
+#     features_paths=features_files,
+#     sample_size=20,
+#     batch_size=32,
+#     predictions_csv=predictions_csv,
+#     plot_save_path=plot_save_path,
+#     save_plots=save_plots,
+#     num_plot_samples=num_plot_samples,
+#     model_type='lstm',  # Specify the model type
+#     input_indices=None
+# )
+
+# data_paths = sorted(glob('data/data-for-doc/features/*.csv', recursive=True))
+# labels_paths = sorted(glob('data/data-for-doc/labels/*.csv', recursive=True))
+
 # for i, path in enumerate(data_paths):
-#     model_types = ['lstm', 'cnn', 'attention']
+#     model_types = ['attention']
 #     file_name = str(data_paths[i]).split('/')[-1]
 #     for mt in model_types:
 #         predict_model_gradio(
 #             model_path=f'results/{mt}_model',
-#             labels_paths=None,
+#             labels_paths=[labels_paths[i]],
 #             features_paths=[data_paths[i]],
 #             sample_size=None,
-#             batch_size=32,
-#             predictions_csv=f'results/{mt}_model/'+'pred_'+file_name,
-#             plot_save_path='plots',
+#             batch_size=4,
+#             predictions_csv=f'results/gap_results/{mt}/'+'pred_'+file_name,
+#             plot_save_path=f'results/gap_results/{mt}/'+'plot_'+file_name[:-4]+'.png',
 #             save_plots=True,
-#             num_plot_samples=0,
+#             num_plot_samples=None,
 #             model_type=mt,
-#             input_indices=(1,-1)
+#             input_indices=None
 #         )

@@ -23,8 +23,8 @@ from matplotlib import pyplot as plt
 def train_model_gradio(
     labels_paths=['data/Gaussian_Cp_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
     features_paths=['data/time_series_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
-    sample_size=200000,
-    epochs=100,
+    sample_size=10000,
+    epochs=20,
     batch_size=32,
     learning_rate=0.001,
     output_dir='results',
@@ -132,6 +132,8 @@ def predict_model_gradio(
         labels_tensor = torch.nan_to_num(labels_tensor, nan=0.0)
     #sample dataset
     if not input_indices:
+        if sample_size is None:
+            sample_size = len(features_tensor)
         sample_indices = random.sample(range(len(features_tensor)), k=sample_size)
         sampled_features = features_tensor[sample_indices]
         sampled_original_features = original_features_tensor[sample_indices]
@@ -171,7 +173,7 @@ def predict_model_gradio(
     plots = []
     if save_plots:
         # Generate multiple plots
-        num_plot = num_plot_samples
+        num_plot = num_plot_samples if num_plot_samples is not None else len(sampled_features)
         total_samples = len(sampled_features)
 
         if num_plot > total_samples:
@@ -198,7 +200,7 @@ def predict_model_gradio(
                 model=model,
                 original_features=sampled_original_features,
                 features=sampled_features,
-                labels=trimmed_labels,  # Can be None
+                labels=sampled_labels,  # Can be None
                 sample_index=sample_idx,
                 model_name=model_type.upper(),
                 save_path=str(save_path)
