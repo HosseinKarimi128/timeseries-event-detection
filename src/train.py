@@ -48,10 +48,13 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         num_train_epochs=epochs,
-        save_steps=1000,
+        save_steps=10000,
         logging_dir='logs/',
         logging_steps=100,
-        report_to=["tensorboard"]
+        report_to=["tensorboard"],
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False
     )
 
     trainer = Trainer(
