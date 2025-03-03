@@ -16,7 +16,7 @@ import os
 #     model_type='attention',
 #     output_dir='results/attention_model',
 #     labels_paths=labels_files,
-#     epochs=100,
+#     epochs=200,
 #     features_paths=features_files)
 
 # model_path = 'results/lstm_model'  # Specify the model path
@@ -39,23 +39,24 @@ import os
 #     input_indices=None
 # )
 
-# data_paths = sorted(glob('data/data-for-doc/features/*.csv', recursive=True))
-# labels_paths = sorted(glob('data/data-for-doc/labels/*.csv', recursive=True))
+data_paths = sorted(glob('data/data-for-doc/features/*.csv', recursive=True))
+labels_paths = sorted(glob('data/data-for-doc/labels/*.csv', recursive=True))
 
-# for i, path in enumerate(data_paths):
-#     model_types = ['attention']
-#     file_name = str(data_paths[i]).split('/')[-1]
-#     for mt in model_types:
-#         predict_model_gradio(
-#             model_path=f'results/{mt}_model',
-#             labels_paths=[labels_paths[i]],
-#             features_paths=[data_paths[i]],
-#             sample_size=None,
-#             batch_size=4,
-#             predictions_csv=f'results/gap_results/{mt}/'+'pred_'+file_name,
-#             plot_save_path=f'results/gap_results/{mt}/'+'plot_'+file_name[:-4]+'.png',
-#             save_plots=True,
-#             num_plot_samples=None,
-#             model_type=mt,
-#             input_indices=None
-#         )
+for i, path in enumerate(data_paths):
+    model_types = ['attention']
+    file_name = str(data_paths[i]).split('/')[-1]
+    for mt in model_types:
+        predict_model_gradio(
+            model_path=f'results/{mt}_model',
+            # model_path = 'results/attention_model/checkpoint-80000',
+            labels_paths=[labels_paths[i]],
+            features_paths=[data_paths[i]],
+            batch_size=10,
+            predictions_csv=f'results/gap_results/{mt}/'+'pred_'+file_name,
+            plot_save_path=f'results/gap_results/{mt}/'+'plot_'+file_name[:-4]+'.png',
+            save_plots=False,
+            num_plot_samples=0,
+            delta_t_force_recreate = True, 
+            model_type=mt,
+            input_indices=None
+        )

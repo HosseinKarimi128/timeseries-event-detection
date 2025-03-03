@@ -90,35 +90,35 @@ def save_predictions_to_csv(original_features, predictions, labels=None, save_pa
     logger.info(f"Saving predictions to {save_path}")
 
     # Convert labels tensor to numpy array if labels are provided
-    if labels is not None:
-        labels_np = labels.cpu().numpy()
-    else:
-        labels_np = None
+    # if labels is not None:
+    #     labels_np = labels.cpu().numpy()
+    # else:
+    #     labels_np = None
 
     # Create a DataFrame with predictions and labels
     # Each row corresponds to a time step for a specific sample
-    num_samples, max_len = predictions.shape
-    data = {
-        'Sample_Index': [],
-        'Time_Step': [],
-        'Displacements': [],
-        'Prediction': []
-    }
+    # num_samples, max_len = predictions.shape
+    # data = {
+    #     'Sample_Index': [],
+    #     'Time_Step': [],
+    #     'Displacements': [],
+    #     'Prediction': []
+    # }
 
-    if labels_np is not None:
-        data['Ground_Truth'] = []
+    # if labels_np is not None:
+    #     data['Ground_Truth'] = []
 
-    for sample_idx in range(num_samples):
-        for time_step in range(max_len):
-            data['Sample_Index'].append(sample_idx)
-            data['Time_Step'].append(time_step)
-            data['Displacements'].append(float(original_features[sample_idx, time_step].item()))
-            data['Prediction'].append(predictions[sample_idx, time_step])
-            if labels_np is not None:
-                data['Ground_Truth'].append(labels_np[sample_idx, time_step])
+    # for sample_idx in range(num_samples):
+    #     for time_step in range(max_len):
+    #         data['Sample_Index'].append(sample_idx)
+    #         data['Time_Step'].append(time_step)
+    #         data['Displacements'].append(float(original_features[sample_idx, time_step].item()))
+    #         data['Prediction'].append(predictions[sample_idx, time_step])
+    #         if labels_np is not None:
+    #             data['Ground_Truth'].append(labels_np[sample_idx, time_step])
 
-    df = pd.DataFrame(data)
-    df.to_csv(save_path, index=False)
+    df = pd.DataFrame(predictions)
+    df.to_csv(save_path, index=False, header=False)
     logger.info(f"Predictions successfully saved to {save_path}")
 
 def plot_model_output(model, original_features, features, labels=None, sample_index=None, model_name="Model", save_path='model_output_sample.png'):

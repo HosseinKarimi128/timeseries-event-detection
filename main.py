@@ -25,7 +25,7 @@ def train_model_gradio(
     features_paths=['data/time_series_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
     sample_size=10000,
     epochs=20,
-    batch_size=32,
+    batch_size=4,
     learning_rate=0.001,
     output_dir='results',
     model_type='lstm'
@@ -95,7 +95,7 @@ def predict_model_gradio(
     model_path,
     labels_paths,  # Can be an empty list if labels are not uploaded
     features_paths,
-    sample_size,
+    delta_t_force_recreate,
     batch_size,
     predictions_csv,
     plot_save_path,
@@ -116,7 +116,7 @@ def predict_model_gradio(
     output_dir = Path(predictions_csv).parent
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Creating delta_t_df")
-    create_delta_t_df(features_paths)
+    create_delta_t_df(features_paths, force_recreate=delta_t_force_recreate)
     logger.info("Creating features_tensor")
     features_tensor, original_features_tensor = create_features_tensor(features_paths, max_len)
     logger.info("Creating labels_tensor")
@@ -130,27 +130,23 @@ def predict_model_gradio(
     features_tensor = torch.nan_to_num(features_tensor, nan=0.0)
     if labels_tensor is not None:
         labels_tensor = torch.nan_to_num(labels_tensor, nan=0.0)
-    #sample dataset
+
+    # Use the entire dataset or a specified range
     if not input_indices:
-        if sample_size is None:
-            sample_size = len(features_tensor)
-        sample_indices = random.sample(range(len(features_tensor)), k=sample_size)
-        sampled_features = features_tensor[sample_indices]
-        sampled_original_features = original_features_tensor[sample_indices]
+        sampled_features = features_tensor
+        sampled_original_features = original_features_tensor
     else:
         sampled_features = features_tensor[input_indices[0]:input_indices[1]]
         sampled_original_features = original_features_tensor[input_indices[0]:input_indices[1]]
+    
     if labels_tensor is not None:
         if not input_indices:
-            sampled_labels = trimmed_labels[sample_indices]
+            sampled_labels = trimmed_labels
         else:
             sampled_labels = trimmed_labels[input_indices[0]:input_indices[1]]
     else:
         sampled_labels = None
-    
-    # zero to nan
-    # sampled_original_features = original_features_tensor.clone()
-    # sampled_original_features[sampled_original_features == 0.0] = float('nan')
+
     # Load configuration based on model type
     from src.model import BiTGLSTMConfig, CNNConfig, AttentionConfig
 
@@ -180,10 +176,7 @@ def predict_model_gradio(
             logger.warning(f"Requested number of plots ({num_plot}) exceeds the number of available samples ({total_samples}). Reducing to {total_samples}.")
             num_plot = total_samples
 
-        # if input_indices is not None:
-        #     sample_indices = list(range(input_indices[0], input_indices[1]))
-        # else:
-            # Select unique random sample indices
+        # Select unique random sample indices
         sample_indices = random.sample(range(total_samples), k=num_plot)
 
         for sample_idx in sample_indices:

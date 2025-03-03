@@ -29,11 +29,11 @@ def create_delta_t(_series):
 def cumulate_ones_and_create_delta_t(_series):
     return create_delta_t(cumulate_ones(_series))
 
-def create_delta_t_df(_paths):
+def create_delta_t_df(_paths, force_recreate=False):
     for _path in _paths:
         file_name = str(_path).split('/')[-1]
         delta_t_file_path = os.path.join('data', 'delta_t_' + file_name)
-        if os.path.exists(delta_t_file_path):
+        if os.path.exists(delta_t_file_path) and not force_recreate:
             logger.info(f"{delta_t_file_path} already exists")
             continue
         _df = pd.read_csv(_path, header=None)
