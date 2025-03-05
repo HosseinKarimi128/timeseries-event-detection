@@ -278,99 +278,67 @@ class BiTGLSTMModel(PreTrainedModel):
 
 class AttentionConfig(PretrainedConfig):
     model_type = "attention"
-    
-    def __init__(
-        self,
-        input_features=2,
-        hidden_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        **kwargs
-    ):
+
+    def __init__(self, hidden_size=32, num_layers=1, max_len=150, dropout=0.5, bidirectional=True, **kwargs):
         super().__init__(**kwargs)
-        self.input_features = input_features
         self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        self.num_layers = num_layers
+        self.max_len = max_len
         self.dropout = dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
+        self.bidirectional = bidirectional
+        logger.debug(f"AttentionConfig initialized with hidden_size={hidden_size}, "
+                     f"num_layers={num_layers}, max_len={max_len}, dropout={dropout}, "
+                     f"bidirectional={bidirectional}")
 
 class AttentionModel(PreTrainedModel):
-    config_class = AttentionConfig
-
-    def __init__(self, config):
+    def __init__(self, config, verbose=False):
         super().__init__(config)
         self.config = config
-
-        # Input projection layer
-        self.input_proj = nn.Linear(config.input_features, config.hidden_size)
+        num_directions = 2 if config.bidirectional else 1
         
-        # Positional embeddings
-        self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size
+        # LSTM layer now expects input_size=2 for two features per time step.
+        self.lstm = nn.LSTM(
+            input_size=2,
+            hidden_size=config.hidden_size,
+            num_layers=config.num_layers,
+            batch_first=True,
+            bidirectional=config.bidirectional,
+            dropout=config.dropout if config.num_layers > 1 else 0
         )
         
-        # Transformer encoder with multiple layers
-        self.transformer_encoder = nn.TransformerEncoder(
-            encoder_layer=nn.TransformerEncoderLayer(
-                d_model=config.hidden_size,
-                nhead=config.num_attention_heads,
-                dropout=config.dropout,
-                dim_feedforward=4*config.hidden_size,
-                activation="gelu",
-                batch_first=False
-            ),
-            num_layers=config.num_hidden_layers
+        # Attention mechanism applied on LSTM outputs.
+        self.attention = nn.MultiheadAttention(
+            embed_dim=config.hidden_size * num_directions,
+            num_heads=1,
+            batch_first=True
         )
         
-        # Output layer for binary probability prediction
-        self.output_layer = nn.Linear(config.hidden_size, 1)
-
-        # Initialize weights properly
-        self.post_init()
-
-    def _init_weights(self, module):
-        """Initialize weights for different layer types"""
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if isinstance(module, nn.Linear) and module.bias is not None:
-                module.bias.data.zero_()
-
-    def forward(self, input_ids, labels=None):
-        # inputs shape: (batch_size, seq_len, 2)
-        batch_size, seq_len, _ = input_ids.size()
-
-        # Project input to hidden dimension
-        hidden_states = self.input_proj(input_ids)  # (batch, seq_len, hidden_size)
-
-        # Add positional embeddings
-        position_ids = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
-        position_embeds = self.position_embeddings(position_ids)
-        hidden_states += position_embeds
-
-        # Adjust dimensions for transformer (seq_len, batch, hidden_size)
-        hidden_states = hidden_states.permute(1, 0, 2)
+        # Final classification layer per time step.
+        self.fc = nn.Linear(config.hidden_size * num_directions, 1)
         
-        # Process through transformer encoder
-        transformer_output = self.transformer_encoder(hidden_states)
+        if verbose:
+            logger.info("AttentionModel with Attention initialized")
+    
+    def forward(self, input_ids, lengths=None, labels=None):
+        # Now expecting input_ids to have shape [batch_size, seq_len, 2]
+        x = input_ids  # Use both features directly.
         
-        # Restore original dimensions (batch, seq_len, hidden_size)
-        transformer_output = transformer_output.permute(1, 0, 2)
-
-        # Generate logits for each timestamp
-        logits = self.output_layer(transformer_output).squeeze(-1)
-
-        # Calculate binary cross-entropy loss if labels provided
+        # LSTM outputs full sequence: shape [batch_size, seq_len, hidden_size * num_directions]
+        lstm_out, _ = self.lstm(x)
+        
+        # Apply attention using LSTM outputs as query, key, and value.
+        attn_output, _ = self.attention(lstm_out, lstm_out, lstm_out)
+        
+        # Final linear layer applied to each time step.
+        logits = self.fc(attn_output).squeeze(-1)  # Shape: [batch_size, seq_len]
+        
         loss = None
         if labels is not None:
             loss_fct = nn.BCEWithLogitsLoss()
             loss = loss_fct(logits, labels)
+        
+        return {'loss': loss, 'logits': torch.sigmoid(logits)}
 
-        return {"loss": loss, "logits": logits}
 
 # class AttentionConfig(PretrainedConfig):
 #     model_type = "attention_with_bilstm"
