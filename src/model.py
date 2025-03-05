@@ -73,6 +73,8 @@ class CNN1D(nn.Module):
         return x
     
 
+
+
 class BiTGLSTMConfig(PretrainedConfig):
     model_type = "lstm"
 
@@ -83,260 +85,400 @@ class BiTGLSTMConfig(PretrainedConfig):
         self.max_len = max_len
         self.dropout = dropout
         self.bidirectional = bidirectional
-        logger.debug(f"LSTMConfig initialized with hidden_size={hidden_size}, num_layers={num_layers}, max_len={max_len}, dropout={dropout}, bidirectional={bidirectional}")
+        logger.debug(f"BasicLSTMConfig initialized with hidden_size={hidden_size}, "
+                     f"num_layers={num_layers}, max_len={max_len}, dropout={dropout}, "
+                     f"bidirectional={bidirectional}")
 
 class BiTGLSTMModel(PreTrainedModel):
     def __init__(self, config, verbose=False):
         super().__init__(config)
-        num_directions = 2 if config.bidirectional else 1
-        self.model = TimeGatedLSTM(
-            input_size=1, 
-            hidden_size=config.hidden_size, 
-            num_layers=config.num_layers,
-            bidirectional=config.bidirectional
-        )
-        self.output_layer = nn.Linear(config.hidden_size * num_directions, config.max_len)
-        if verbose:
-            logger.info("LSTMModel initialized")
+        self.config = config
+        num_directions = 2 if config.bidirectional else 1        
         self.lstm = nn.LSTM(
-            input_size=config.hidden_size*num_directions,
+            input_size=1,
             hidden_size=config.hidden_size,
             num_layers=config.num_layers,
             batch_first=True,
-            bidirectional=True,
+            bidirectional=config.bidirectional,
             dropout=config.dropout if config.num_layers > 1 else 0
         )
-        self.config = config
-    def forward(self, input_ids, lengths=None, labels=None):
-        if lengths is None:
-            lengths = torch.sum(input_ids != 0, dim=-2)[0]
-        x = input_ids[:, :lengths[0], 0].unsqueeze(-1)  # Shape: [batch_size, seq_len, 1]
-        delta_t = input_ids[:, :lengths[0], 1].unsqueeze(-1)  # Shape: [batch_size, seq_len, 1]
-        x, hc = self.model(x, delta_t)
-        # h, c = hc
-        # h = torch.cat(h).view(32,self.config.num_layers*2,-1)[:,:,-1]
-        # c = torch.cat(c).view(32,self.config.num_layers*2,-1)[:,:,-1]
-        # breakpoint()
-        x = torch.max(x, dim=1).values  # Shape: [batch_size, hidden_size * num_directions]
-        x , _ = self.lstm(x)
-        logits = self.output_layer(x).squeeze(-1)  # Shape: [batch_size]
+        self.fc = nn.Linear(config.hidden_size * num_directions, 1)
         
+        if verbose:
+            logger.info("BasicLSTMModel initialized")
+    
+    def forward(self, input_ids, lengths=None, labels=None):
+        x = input_ids[:, :, 0].unsqueeze(-1)  # Shape: [batch_size, seq_len, 1]
+        lstm_out, _ = self.lstm(x)  # lstm_out shape: [batch_size, seq_len, hidden_size * num_directions       
+        logits = self.fc(lstm_out).squeeze(-1)  # Final shape: [batch_size, seq_len]
         loss = None
         if labels is not None:
             loss_fct = nn.BCEWithLogitsLoss()
             loss = loss_fct(logits, labels)
+        
         return {'loss': loss, 'logits': torch.sigmoid(logits)}
+    
+# class BiTGLSTMConfig(PretrainedConfig):
+#     model_type = "lstm"
 
-class BiTimeGatedLSTMCell(nn.Module):
-    def __init__(self, input_size, hidden_size):
-        super(BiTimeGatedLSTMCell, self).__init__()
-        self.hidden_size = hidden_size
+#     def __init__(self, hidden_size=32, num_layers=1, max_len=150, dropout=0.5, bidirectional=True, **kwargs):
+#         super().__init__(**kwargs)
+#         self.hidden_size = hidden_size
+#         self.num_layers = num_layers
+#         self.max_len = max_len
+#         self.dropout = dropout
+#         self.bidirectional = bidirectional
+#         logger.debug(f"LSTMConfig initialized with hidden_size={hidden_size}, num_layers={num_layers}, max_len={max_len}, dropout={dropout}, bidirectional={bidirectional}")
 
-        # Combined weight matrices and biases
-        self.weight_ih = nn.Linear(input_size, 4 * hidden_size)
-        self.weight_hh = nn.Linear(hidden_size, 4 * hidden_size)
+# class BiTGLSTMModel(PreTrainedModel):
+#     def __init__(self, config, verbose=False):
+#         super().__init__(config)
+#         num_directions = 2 if config.bidirectional else 1
+#         self.model = TimeGatedLSTM(
+#             input_size=1, 
+#             hidden_size=config.hidden_size, 
+#             num_layers=config.num_layers,
+#             bidirectional=config.bidirectional
+#         )
+#         self.output_layer = nn.Linear(config.hidden_size * num_directions, config.max_len)
+#         if verbose:
+#             logger.info("LSTMModel initialized")
+#         self.lstm = nn.LSTM(
+#             input_size=config.hidden_size*num_directions,
+#             hidden_size=config.hidden_size,
+#             num_layers=config.num_layers,
+#             batch_first=True,
+#             bidirectional=True,
+#             dropout=config.dropout if config.num_layers > 1 else 0
+#         )
+#         self.config = config
+#     def forward(self, input_ids, lengths=None, labels=None):
+#         if lengths is None:
+#             lengths = torch.sum(input_ids != 0, dim=-2)[0]
+#         x = input_ids[:, :lengths[0], 0].unsqueeze(-1)  # Shape: [batch_size, seq_len, 1]
+#         delta_t = input_ids[:, :lengths[0], 1].unsqueeze(-1)  # Shape: [batch_size, seq_len, 1]
+#         x, hc = self.model(x, delta_t)
+#         # h, c = hc
+#         # h = torch.cat(h).view(32,self.config.num_layers*2,-1)[:,:,-1]
+#         # c = torch.cat(c).view(32,self.config.num_layers*2,-1)[:,:,-1]
+#         # breakpoint()
+#         x = torch.max(x, dim=1).values  # Shape: [batch_size, hidden_size * num_directions]
+#         x , _ = self.lstm(x)
+#         logits = self.output_layer(x).squeeze(-1)  # Shape: [batch_size]
+        
+#         loss = None
+#         if labels is not None:
+#             loss_fct = nn.BCEWithLogitsLoss()
+#             loss = loss_fct(logits, labels)
+#         return {'loss': loss, 'logits': torch.sigmoid(logits)}
 
-        # Time-gating mechanism
-        self.time_gate = nn.Linear(1, hidden_size)
+# class BiTimeGatedLSTMCell(nn.Module):
+#     def __init__(self, input_size, hidden_size):
+#         super(BiTimeGatedLSTMCell, self).__init__()
+#         self.hidden_size = hidden_size
 
-    def forward(self, x, delta_t, hx):
-        h_t, c_t = hx  # Initial hidden and cell states
+#         # Combined weight matrices and biases
+#         self.weight_ih = nn.Linear(input_size, 4 * hidden_size)
+#         self.weight_hh = nn.Linear(hidden_size, 4 * hidden_size)
 
-        # Compute gates in a vectorized manner
-        gates = self.weight_ih(x) + self.weight_hh(h_t).unsqueeze(1)
+#         # Time-gating mechanism
+#         self.time_gate = nn.Linear(1, hidden_size)
 
-        i_gate, f_gate, g_gate, o_gate = gates.chunk(4, dim=2)
-        i_gate = torch.sigmoid(i_gate)
-        f_gate = torch.sigmoid(f_gate)
-        g_gate = torch.tanh(g_gate)
-        o_gate = torch.sigmoid(o_gate)
-        t_gate = torch.sigmoid(self.time_gate(delta_t))
+#     def forward(self, x, delta_t, hx):
+#         h_t, c_t = hx  # Initial hidden and cell states
 
-        # Update cell state and hidden state
-        c_t = f_gate * c_t.unsqueeze(1) + i_gate * g_gate * t_gate
-        h_t = o_gate * torch.tanh(c_t)
+#         # Compute gates in a vectorized manner
+#         gates = self.weight_ih(x) + self.weight_hh(h_t).unsqueeze(1)
 
-        h_t_final = h_t[:, -1, :]  # Get the last time step
-        c_t_final = c_t[:, -1, :]  # Get the last time step
+#         i_gate, f_gate, g_gate, o_gate = gates.chunk(4, dim=2)
+#         i_gate = torch.sigmoid(i_gate)
+#         f_gate = torch.sigmoid(f_gate)
+#         g_gate = torch.tanh(g_gate)
+#         o_gate = torch.sigmoid(o_gate)
+#         t_gate = torch.sigmoid(self.time_gate(delta_t))
 
-        return h_t, (h_t_final, c_t_final)
+#         # Update cell state and hidden state
+#         c_t = f_gate * c_t.unsqueeze(1) + i_gate * g_gate * t_gate
+#         h_t = o_gate * torch.tanh(c_t)
 
-class TimeGatedLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, bidirectional=False):
-        super(TimeGatedLSTM, self).__init__()
-        self.num_layers = num_layers
-        self.bidirectional = bidirectional
-        self.hidden_size = hidden_size
-        num_directions = 2 if bidirectional else 1
+#         h_t_final = h_t[:, -1, :]  # Get the last time step
+#         c_t_final = c_t[:, -1, :]  # Get the last time step
 
-        self.layers = nn.ModuleList()
-        for layer_idx in range(num_layers):
-            for direction in range(num_directions):
-                input_dim = input_size if layer_idx == 0 else hidden_size * num_directions
-                self.layers.append(BiTimeGatedLSTMCell(input_dim, hidden_size))
+#         return h_t, (h_t_final, c_t_final)
 
-    def forward(self, x, delta_t):
-        batch_size = x.size(0)
-        seq_len = x.size(1)
-        device = x.device
-        num_directions = 2 if self.bidirectional else 1
+# class TimeGatedLSTM(nn.Module):
+#     def __init__(self, input_size, hidden_size, num_layers, bidirectional=False):
+#         super(TimeGatedLSTM, self).__init__()
+#         self.num_layers = num_layers
+#         self.bidirectional = bidirectional
+#         self.hidden_size = hidden_size
+#         num_directions = 2 if bidirectional else 1
 
-        if self.bidirectional:
-            h = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers * num_directions)]
-            c = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers * num_directions)]
+#         self.layers = nn.ModuleList()
+#         for layer_idx in range(num_layers):
+#             for direction in range(num_directions):
+#                 input_dim = input_size if layer_idx == 0 else hidden_size * num_directions
+#                 self.layers.append(BiTimeGatedLSTMCell(input_dim, hidden_size))
 
-            output_forward = x
-            output_backward = torch.flip(x, dims=[1])
-            delta_t_backward = torch.flip(delta_t, dims=[1])
+#     def forward(self, x, delta_t):
+#         batch_size = x.size(0)
+#         seq_len = x.size(1)
+#         device = x.device
+#         num_directions = 2 if self.bidirectional else 1
 
-            for layer_idx in range(self.num_layers):
-                layer_fwd_idx = layer_idx * num_directions
-                layer_bwd_idx = layer_fwd_idx + 1
+#         if self.bidirectional:
+#             h = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers * num_directions)]
+#             c = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers * num_directions)]
 
-                # Forward pass
-                layer_fwd = self.layers[layer_fwd_idx]
-                output_forward, (h[layer_fwd_idx], c[layer_fwd_idx]) = layer_fwd(
-                    output_forward, delta_t, (h[layer_fwd_idx], c[layer_fwd_idx])
-                )
+#             output_forward = x
+#             output_backward = torch.flip(x, dims=[1])
+#             delta_t_backward = torch.flip(delta_t, dims=[1])
 
-                # Backward pass
-                layer_bwd = self.layers[layer_bwd_idx]
-                output_backward, (h[layer_bwd_idx], c[layer_bwd_idx]) = layer_bwd(
-                    output_backward, delta_t_backward, (h[layer_bwd_idx], c[layer_bwd_idx])
-                )
-                output_backward = torch.flip(output_backward, dims=[1])  # Reverse outputs back to original order
+#             for layer_idx in range(self.num_layers):
+#                 layer_fwd_idx = layer_idx * num_directions
+#                 layer_bwd_idx = layer_fwd_idx + 1
 
-                # Concatenate outputs
-                output = torch.cat((output_forward, output_backward), dim=2)
+#                 # Forward pass
+#                 layer_fwd = self.layers[layer_fwd_idx]
+#                 output_forward, (h[layer_fwd_idx], c[layer_fwd_idx]) = layer_fwd(
+#                     output_forward, delta_t, (h[layer_fwd_idx], c[layer_fwd_idx])
+#                 )
 
-                # Prepare inputs for next layer
-                output_forward = output
-                output_backward = torch.flip(output, dims=[1])
-                delta_t_backward = torch.flip(delta_t, dims=[1])
+#                 # Backward pass
+#                 layer_bwd = self.layers[layer_bwd_idx]
+#                 output_backward, (h[layer_bwd_idx], c[layer_bwd_idx]) = layer_bwd(
+#                     output_backward, delta_t_backward, (h[layer_bwd_idx], c[layer_bwd_idx])
+#                 )
+#                 output_backward = torch.flip(output_backward, dims=[1])  # Reverse outputs back to original order
 
-            return output, (h, c)
-        else:
-            h = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers)]
-            c = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers)]
+#                 # Concatenate outputs
+#                 output = torch.cat((output_forward, output_backward), dim=2)
 
-            for layer_idx in range(self.num_layers):
-                layer = self.layers[layer_idx]
-                x, (h[layer_idx], c[layer_idx]) = layer(x, delta_t, (h[layer_idx], c[layer_idx]))
+#                 # Prepare inputs for next layer
+#                 output_forward = output
+#                 output_backward = torch.flip(output, dims=[1])
+#                 delta_t_backward = torch.flip(delta_t, dims=[1])
 
-            return x
+#             return output, (h, c)
+#         else:
+#             h = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers)]
+#             c = [torch.zeros(batch_size, self.hidden_size).to(device) for _ in range(self.num_layers)]
+
+#             for layer_idx in range(self.num_layers):
+#                 layer = self.layers[layer_idx]
+#                 x, (h[layer_idx], c[layer_idx]) = layer(x, delta_t, (h[layer_idx], c[layer_idx]))
+
+#             return x
 
 
 # =========================================================================================================
 # Attention Model
 # =========================================================================================================
 
+
 class AttentionConfig(PretrainedConfig):
-    model_type = "attention_with_bilstm"
+    model_type = "attention"
     
     def __init__(
-        self, 
-        input_size=2, 
-        lstm_hidden_size=128, 
-        lstm_num_layers=1, 
-        lstm_dropout=0.1, 
-        attention_dim=128, 
-        bidirectional=False,
-        output_dim=1,
+        self,
+        input_features=2,
+        hidden_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=2,
         dropout=0.1,
+        max_position_embeddings=512,
+        initializer_range=0.02,
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.input_size = input_size
-        self.lstm_hidden_size = lstm_hidden_size
-        self.lstm_num_layers = lstm_num_layers
-        self.lstm_dropout = lstm_dropout
-        self.attention_dim = attention_dim
-        self.bidirectional = bidirectional
-        self.output_dim = output_dim
+        self.input_features = input_features
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.dropout = dropout
-
-class EncoderLSTM(nn.Module):
-    def __init__(self, input_dim, hidden_dim, n_layers, bidirectional=False, dropout=0.1):
-        super(EncoderLSTM, self).__init__()
-        self.rnn = nn.LSTM(
-            input_dim, 
-            hidden_dim, 
-            n_layers, 
-            batch_first=True, 
-            bidirectional=bidirectional, 
-            dropout=dropout if n_layers > 1 else 0.0
-        )
-        self.num_directions = 2 if bidirectional else 1
-        self.hidden_dim = hidden_dim * self.num_directions
-    
-    def forward(self, src):
-        # src: (batch_size, seq_len, input_dim)
-        outputs, (hidden, cell) = self.rnn(src)
-        # outputs: (batch_size, seq_len, hidden_dim)
-        return outputs, hidden, cell
-
-class Attention(nn.Module):
-    def __init__(self, hidden_dim, attention_dim):
-        super(Attention, self).__init__()
-        self.attn = nn.Linear(hidden_dim, attention_dim)
-        self.v = nn.Linear(attention_dim, 1, bias=False)
-    
-    def forward(self, encoder_outputs):
-        # encoder_outputs: (batch_size, seq_len, hidden_dim)
-        energy = torch.tanh(self.attn(encoder_outputs))  # (batch_size, seq_len, attention_dim)
-        attention = self.v(energy).squeeze(2)  # (batch_size, seq_len)
-        return attention  # Return attention scores before softmax
+        self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
 
 class AttentionModel(PreTrainedModel):
     config_class = AttentionConfig
 
     def __init__(self, config):
         super().__init__(config)
-        self.encoder = EncoderLSTM(
-            input_dim=config.input_size, 
-            hidden_dim=config.lstm_hidden_size, 
-            n_layers=config.lstm_num_layers, 
-            bidirectional=config.bidirectional,
-            dropout=config.lstm_dropout
+        self.config = config
+
+        # Input projection layer
+        self.input_proj = nn.Linear(config.input_features, config.hidden_size)
+        
+        # Positional embeddings
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size
         )
-        self.hidden_dim = config.lstm_hidden_size * (2 if config.bidirectional else 1)
-        self.attention = Attention(self.hidden_dim, config.attention_dim)
-        self.dropout = nn.Dropout(config.dropout)
-        self.fc = nn.Linear(self.hidden_dim, config.output_dim)
-        self.sigmoid = nn.Sigmoid()
-    
+        
+        # Transformer encoder with multiple layers
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer=nn.TransformerEncoderLayer(
+                d_model=config.hidden_size,
+                nhead=config.num_attention_heads,
+                dropout=config.dropout,
+                dim_feedforward=4*config.hidden_size,
+                activation="gelu",
+                batch_first=False
+            ),
+            num_layers=config.num_hidden_layers
+        )
+        
+        # Output layer for binary probability prediction
+        self.output_layer = nn.Linear(config.hidden_size, 1)
+
+        # Initialize weights properly
+        self.post_init()
+
+    def _init_weights(self, module):
+        """Initialize weights for different layer types"""
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                module.bias.data.zero_()
+
     def forward(self, input_ids, labels=None):
-        # input_ids: (batch_size, seq_len, input_size)
-        encoder_outputs, hidden, cell = self.encoder(input_ids)  # (batch_size, seq_len, hidden_dim)
+        # inputs shape: (batch_size, seq_len, 2)
+        batch_size, seq_len, _ = input_ids.size()
+
+        # Project input to hidden dimension
+        hidden_states = self.input_proj(input_ids)  # (batch, seq_len, hidden_size)
+
+        # Add positional embeddings
+        position_ids = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
+        position_embeds = self.position_embeddings(position_ids)
+        hidden_states += position_embeds
+
+        # Adjust dimensions for transformer (seq_len, batch, hidden_size)
+        hidden_states = hidden_states.permute(1, 0, 2)
         
-        # Compute attention scores
-        attention_scores = self.attention(encoder_outputs)  # (batch_size, seq_len)
+        # Process through transformer encoder
+        transformer_output = self.transformer_encoder(hidden_states)
         
-        # Apply causal mask to prevent attention to future positions
-        batch_size, seq_len, _ = encoder_outputs.size()
-        mask = torch.tril(torch.ones(seq_len, seq_len)).unsqueeze(0).to(encoder_outputs.device)  # (1, seq_len, seq_len)
-        attention_scores = attention_scores.unsqueeze(1).expand(-1, seq_len, -1)  # (batch_size, seq_len, seq_len)
-        attention_scores = attention_scores.masked_fill(mask == 0, float('-inf'))
-        
-        # Compute attention weights
-        attention_weights = F.softmax(attention_scores, dim=-1)  # (batch_size, seq_len, seq_len)
-        
-        # Compute context vectors
-        context_vectors = torch.bmm(attention_weights, encoder_outputs)  # (batch_size, seq_len, hidden_dim)
-        
-        # Apply dropout
-        context_vectors = self.dropout(context_vectors)
-        
-        # Predict probabilities for each time step
-        predictions = self.fc(context_vectors).squeeze(-1)  # (batch_size, seq_len)
-        predictions = self.sigmoid(predictions)
-        
+        # Restore original dimensions (batch, seq_len, hidden_size)
+        transformer_output = transformer_output.permute(1, 0, 2)
+
+        # Generate logits for each timestamp
+        logits = self.output_layer(transformer_output).squeeze(-1)
+
+        # Calculate binary cross-entropy loss if labels provided
         loss = None
         if labels is not None:
-            # Ensure labels have the same shape as predictions
-            if labels.shape != predictions.shape:
-                raise ValueError(f"Labels shape {labels.shape} does not match predictions shape {predictions.shape}.")
-            loss_fct = nn.BCELoss()
-            loss = loss_fct(predictions, labels)
+            loss_fct = nn.BCEWithLogitsLoss()
+            loss = loss_fct(logits, labels)
+
+        return {"loss": loss, "logits": logits}
+
+# class AttentionConfig(PretrainedConfig):
+#     model_type = "attention_with_bilstm"
+    
+#     def __init__(
+#         self, 
+#         input_size=2, 
+#         lstm_hidden_size=128, 
+#         lstm_num_layers=1, 
+#         lstm_dropout=0.1, 
+#         attention_dim=128, 
+#         bidirectional=False,
+#         output_dim=1,
+#         dropout=0.1,
+#         **kwargs
+#     ):
+#         super().__init__(**kwargs)
+#         self.input_size = input_size
+#         self.lstm_hidden_size = lstm_hidden_size
+#         self.lstm_num_layers = lstm_num_layers
+#         self.lstm_dropout = lstm_dropout
+#         self.attention_dim = attention_dim
+#         self.bidirectional = bidirectional
+#         self.output_dim = output_dim
+#         self.dropout = dropout
+
+# class EncoderLSTM(nn.Module):
+#     def __init__(self, input_dim, hidden_dim, n_layers, bidirectional=False, dropout=0.1):
+#         super(EncoderLSTM, self).__init__()
+#         self.rnn = nn.LSTM(
+#             input_dim, 
+#             hidden_dim, 
+#             n_layers, 
+#             batch_first=True, 
+#             bidirectional=bidirectional, 
+#             dropout=dropout if n_layers > 1 else 0.0
+#         )
+#         self.num_directions = 2 if bidirectional else 1
+#         self.hidden_dim = hidden_dim * self.num_directions
+    
+#     def forward(self, src):
+#         # src: (batch_size, seq_len, input_dim)
+#         outputs, (hidden, cell) = self.rnn(src)
+#         # outputs: (batch_size, seq_len, hidden_dim)
+#         return outputs, hidden, cell
+
+# class Attention(nn.Module):
+#     def __init__(self, hidden_dim, attention_dim):
+#         super(Attention, self).__init__()
+#         self.attn = nn.Linear(hidden_dim, attention_dim)
+#         self.v = nn.Linear(attention_dim, 1, bias=False)
+    
+#     def forward(self, encoder_outputs):
+#         # encoder_outputs: (batch_size, seq_len, hidden_dim)
+#         energy = torch.tanh(self.attn(encoder_outputs))  # (batch_size, seq_len, attention_dim)
+#         attention = self.v(energy).squeeze(2)  # (batch_size, seq_len)
+#         return attention  # Return attention scores before softmax
+
+# class AttentionModel(PreTrainedModel):
+#     config_class = AttentionConfig
+
+#     def __init__(self, config):
+#         super().__init__(config)
+#         self.encoder = EncoderLSTM(
+#             input_dim=config.input_size, 
+#             hidden_dim=config.lstm_hidden_size, 
+#             n_layers=config.lstm_num_layers, 
+#             bidirectional=config.bidirectional,
+#             dropout=config.lstm_dropout
+#         )
+#         self.hidden_dim = config.lstm_hidden_size * (2 if config.bidirectional else 1)
+#         self.attention = Attention(self.hidden_dim, config.attention_dim)
+#         self.dropout = nn.Dropout(config.dropout)
+#         self.fc = nn.Linear(self.hidden_dim, config.output_dim)
+#         self.sigmoid = nn.Sigmoid()
+    
+#     def forward(self, input_ids, labels=None):
+#         # input_ids: (batch_size, seq_len, input_size)
+#         encoder_outputs, hidden, cell = self.encoder(input_ids)  # (batch_size, seq_len, hidden_dim)
         
-        return {'loss': loss, 'logits': predictions}
+#         # Compute attention scores
+#         attention_scores = self.attention(encoder_outputs)  # (batch_size, seq_len)
+        
+#         # Apply causal mask to prevent attention to future positions
+#         batch_size, seq_len, _ = encoder_outputs.size()
+#         mask = torch.tril(torch.ones(seq_len, seq_len)).unsqueeze(0).to(encoder_outputs.device)  # (1, seq_len, seq_len)
+#         attention_scores = attention_scores.unsqueeze(1).expand(-1, seq_len, -1)  # (batch_size, seq_len, seq_len)
+#         attention_scores = attention_scores.masked_fill(mask == 0, float('-inf'))
+        
+#         # Compute attention weights
+#         attention_weights = F.softmax(attention_scores, dim=-1)  # (batch_size, seq_len, seq_len)
+        
+#         # Compute context vectors
+#         context_vectors = torch.bmm(attention_weights, encoder_outputs)  # (batch_size, seq_len, hidden_dim)
+        
+#         # Apply dropout
+#         context_vectors = self.dropout(context_vectors)
+        
+#         # Predict probabilities for each time step
+#         predictions = self.fc(context_vectors).squeeze(-1)  # (batch_size, seq_len)
+#         predictions = self.sigmoid(predictions)
+        
+#         loss = None
+#         if labels is not None:
+#             # Ensure labels have the same shape as predictions
+#             if labels.shape != predictions.shape:
+#                 raise ValueError(f"Labels shape {labels.shape} does not match predictions shape {predictions.shape}.")
+#             loss_fct = nn.BCELoss()
+#             loss = loss_fct(predictions, labels)
+        
+#         return {'loss': loss, 'logits': predictions}

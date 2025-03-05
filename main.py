@@ -23,12 +23,12 @@ from matplotlib import pyplot as plt
 def train_model_gradio(
     labels_paths=['data/Gaussian_Cp_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
     features_paths=['data/time_series_EGMS_L3_E27N51_100km_E_2018_2022_1.csv'],
-    sample_size=10000,
     epochs=20,
     batch_size=4,
     learning_rate=0.001,
     output_dir='results',
-    model_type='lstm'
+    model_type='lstm', 
+    checkpoint_path=None,
 ):
     setup_logging()
 
@@ -55,13 +55,11 @@ def train_model_gradio(
     # nan to 0
     features_tensor = torch.nan_to_num(features_tensor, nan=0.0)
     labels_tensor = torch.nan_to_num(labels_tensor, nan=0.0)
-    #sample dataset
-    sample_indices = random.sample(range(len(features_tensor)), k=sample_size)
-    sampled_features = features_tensor[sample_indices]
-    sampled_labels = trimmed_labels[sample_indices]
     # Train-validation split
+    print("Shape of features_tensor:", features_tensor.shape)
+    print("Shape of trimmed_labels:", trimmed_labels.shape)
     train_features, val_features, train_labels, val_labels = train_test_split(
-        sampled_features, sampled_labels, test_size=0.2, random_state=42
+        features_tensor, trimmed_labels, test_size=0.2, random_state=42
     )
 
     # Create datasets based on model type
@@ -82,7 +80,8 @@ def train_model_gradio(
         epochs=epochs,
         batch_size=batch_size,
         learning_rate=learning_rate,
-        model_type=model_type
+        model_type=model_type,
+        checkpoint_path=checkpoint_path
     )
     trainer.save_model(output_dir)
     logger.info(f"Model saved to {output_dir}")
