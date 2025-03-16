@@ -10,8 +10,8 @@ from torchinfo import summary
 import os
 
 # os.environ['CUDA_LAUNCH_BLOCKING']="1"
-os.environ['TORCH_USE_CUDA_DSA'] = "1"
-
+# os.environ['TORCH_USE_CUDA_DSA'] = "1"
+torch.cuda.set_per_process_memory_fraction(0.1, 0)
 logger = logging.getLogger(__name__)
 
 def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, batch_size=32, learning_rate=0.001, model_type='lstm', checkpoint_path=None):
@@ -29,7 +29,7 @@ def train_model(train_dataset, val_dataset, output_dir="results", epochs=100, ba
         model = AttentionModel(config=config)
     else:
         raise ValueError("Unsupported model type. Choose 'lstm', 'cnn', or 'attention'.")
-    
+
 
     print(summary(model, input_data = (sample_input)))
     training_args = TrainingArguments(

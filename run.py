@@ -9,18 +9,19 @@ labels_files = 'data/sampled_labels.csv'
 
 features_files = glob(features_files)
 labels_files = glob(labels_files)
-model_type = 'attention'
+model_type = 'cnn'
 
 
 train_model_gradio(
-    model_type=model_type,
-    output_dir=f'results/{model_type}_model',
-    labels_paths=labels_files,
-    epochs=100,
-    features_paths=features_files, 
-    # checkpoint_path = 'results/attention_model/checkpoint-20000'
-    checkpoint_path = None
-    )
+ model_type=model_type,
+ output_dir=f'results/{model_type}_model',
+ labels_paths=labels_files,
+ epochs=100,
+ batch_size=8,
+ features_paths=features_files, 
+ # checkpoint_path = 'results/attention_model/checkpoint-20000'
+ checkpoint_path = None
+ )
 
 # model_path = 'results/lstm_model'  # Specify the model path
 # predictions_csv = 'results/lstm_model/predictions.csv'  # Specify the path for saving predictions
@@ -42,8 +43,13 @@ train_model_gradio(
 #     input_indices=None
 # )
 
-data_paths = sorted(glob('data/data-for-doc/features/*.csv', recursive=True))
-labels_paths = sorted(glob('data/data-for-doc/labels/*.csv', recursive=True))
+# data_paths = sorted(glob('data/data-for-doc/features/*.csv', recursive=True))
+# labels_paths = sorted(glob('data/data-for-doc/labels/*.csv', recursive=True))
+
+# data_paths = glob('data/new_sampled_features.csv')
+# labels_paths = glob('data/new_sampled_labels.csv')
+
+data_paths = ['data/final_matrix_descending_data.csv']
 
 for i, path in enumerate(data_paths):
     model_types = ['attention']
@@ -52,14 +58,16 @@ for i, path in enumerate(data_paths):
         predict_model_gradio(
             model_path=f'results/{mt}_model',
             # model_path = 'results/attention_model/checkpoint-3500',
-            labels_paths=[labels_paths[i]],
+            # labels_paths=[labels_paths[i]],
             features_paths=[data_paths[i]],
             batch_size=10,
-            predictions_csv=f'results/gap_results/{mt}/'+'pred_'+file_name,
-            plot_save_path=f'results/gap_results/{mt}/'+'plot_'+file_name[:-4]+'.png',
+            predictions_csv=f'results/matrix_result/{mt}/'+f'{mt}_pred_'+file_name,
+            # predictions_csv=f'results/val_result/{mt}/'+f'{mt}_pred_'+file_name,
+            # predictions_csv=f'results/gap_results/{mt}/'+f'{mt}_pred_'+file_name,
+            plot_save_path=f'results/gap_results/{mt}/'+f'{mt}_plot_'+file_name[:-4]+'.png',
             save_plots=False,
             num_plot_samples=0,
-            delta_t_force_recreate = True, 
+            delta_t_force_recreate = False, 
             model_type=mt,
             input_indices=None
         )

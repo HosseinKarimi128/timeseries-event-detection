@@ -92,7 +92,6 @@ def train_model_gradio(
 
 def predict_model_gradio(
     model_path,
-    labels_paths,  # Can be an empty list if labels are not uploaded
     features_paths,
     delta_t_force_recreate,
     batch_size,
@@ -101,6 +100,7 @@ def predict_model_gradio(
     save_plots,
     num_plot_samples,
     model_type,
+    labels_paths=None,  # Can be an empty list if labels are not uploaded
     input_indices=None,
     ):
     setup_logging()
